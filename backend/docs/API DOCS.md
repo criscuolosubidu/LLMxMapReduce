@@ -7,6 +7,12 @@
 
 **认证方式**: JWT Bearer Token
 
+### 安全性说明
+- **用户隔离**：每个用户只能访问自己创建的任务和数据
+- **权限验证**：系统会验证用户对资源的访问权限
+- **JWT认证**：大部分接口需要有效的JWT令牌
+- **数据保护**：敏感操作需要额外的权限验证
+
 ## 认证接口 (Authentication)
 
 ### 1. 发送短信验证码
@@ -391,7 +397,12 @@ GET /api/user/tasks?status=completed&limit=10
 GET /api/output/{task_id}
 ```
 
-获取已完成任务的输出结果，优先从数据库获取，备选从文件获取。
+获取已完成任务的输出结果，优先从数据库获取，备选从文件获取。**需要JWT认证，只能访问属于当前用户的任务结果。**
+
+**请求头**:
+```
+Authorization: Bearer <token>
+```
 
 **路径参数**:
 - `task_id`: 任务ID (string)
@@ -414,6 +425,7 @@ GET /api/output/{task_id}
 ```json
 {
   "success": true,
+  "message": "任务结果获取成功",
   "content": "{\n  \"title\": \"AI研究综述\",\n  \"sections\": [...]\n}",
   "source": "file",
   "output_file": "/path/to/output.json"
@@ -422,7 +434,10 @@ GET /api/output/{task_id}
 
 **错误响应**:
 - `400 Bad Request`: 任务尚未完成
+- `401 Unauthorized`: 未提供有效token或无法获取用户信息
+- `403 Forbidden`: 无权访问该任务结果（任务不属于当前用户）
 - `404 Not Found`: 任务不存在或输出结果不存在
+- `500 Internal Server Error`: 服务器内部错误
 
 ---
 
@@ -658,6 +673,7 @@ GET /api/health
 | 200 | 请求成功 |
 | 400 | 请求参数错误 |
 | 401 | 未授权/token无效 |
+| 403 | 禁止访问/无权限 |
 | 404 | 资源不存在 |
 | 500 | 服务器内部错误 |
 | 503 | 服务不可用 |
@@ -683,6 +699,20 @@ Authorization: Bearer <your_jwt_token>
 ```
 
 Token获取方式：调用登录接口成功后，从响应中获取token字段。
+
+### 权限控制说明
+
+**用户隔离原则**：
+- 用户只能访问和操作自己创建的任务
+- 系统会自动验证任务归属权，确保数据安全
+- 尝试访问其他用户的任务将返回403禁止访问错误
+
+**需要权限验证的接口**：
+- `POST /api/task/submit` - 提交任务（自动关联当前用户）
+- `GET /api/user/tasks` - 获取当前用户任务列表
+- `GET /api/output/{task_id}` - 获取任务输出结果（仅限任务创建者）
+- `POST /redemption/redeem` - 使用兑换码（仅限当前用户）
+- `GET /redemption/history` - 获取兑换历史（仅限当前用户）
 
 ## 速率限制
 

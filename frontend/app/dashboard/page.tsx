@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
-import { Search, Send, Upload, Globe, ThumbsUp, MessageSquare, Clock, ChevronDown, RefreshCw } from "lucide-react"
+import { Search, Send, Upload, Globe, ThumbsUp, MessageSquare, Clock, ChevronDown, RefreshCw, Eye } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/auth-context"
@@ -338,6 +338,8 @@ interface TaskCardProps {
 }
 
 function TaskCard({ task }: TaskCardProps) {
+  const router = useRouter()
+
   // 格式化时间
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('zh-CN', {
@@ -395,12 +397,37 @@ function TaskCard({ task }: TaskCardProps) {
     }
   }
 
+  // 点击处理函数
+  const handleCardClick = () => {
+    if (task.status === 'completed') {
+      router.push(`/article/${task.id}`)
+    } else {
+      toast.info("文章还未完成", {
+        description: "只有已完成的文章才能查看详情",
+      })
+    }
+  }
+
+  // 判断是否可点击
+  const isClickable = task.status === 'completed'
+
   return (
-    <Card className="overflow-hidden hover:shadow-md transition-shadow h-full">
-      <CardContent className="p-0 h-full flex flex-col">
+    <Card className={`overflow-hidden transition-all h-full ${
+      isClickable 
+        ? 'hover:shadow-lg hover:scale-[1.02] cursor-pointer hover:border-blue-300 dark:hover:border-blue-600' 
+        : 'hover:shadow-md'
+    }`}>
+      <CardContent className="p-0 h-full flex flex-col" onClick={handleCardClick}>
         {/* 内容区域 - 自动扩展 */}
         <div className="flex-1 p-5 space-y-3">
-          <h3 className="font-medium line-clamp-2 min-h-[3rem] leading-6">{task.params.topic}</h3>
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="font-medium line-clamp-2 min-h-[3rem] leading-6 flex-1">{task.params.topic}</h3>
+            {isClickable && (
+              <div className="flex-shrink-0 p-1 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400">
+                <Eye className="h-4 w-4" />
+              </div>
+            )}
+          </div>
           <div className="space-y-1">
             <p className="text-sm text-muted-foreground">
               创建时间：{formatDate(task.created_at)}
@@ -420,7 +447,15 @@ function TaskCard({ task }: TaskCardProps) {
         {/* 底部操作栏 - 固定在底部 */}
         <div className="flex items-center justify-between px-5 py-3 border-t bg-gray-50/50 dark:bg-gray-800/50">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-8 w-8"
+              onClick={(e) => {
+                e.stopPropagation()
+                // 这里可以添加点赞功能
+              }}
+            >
               <ThumbsUp className="h-4 w-4" />
             </Button>
             <span className="text-sm">0</span>
@@ -431,6 +466,9 @@ function TaskCard({ task }: TaskCardProps) {
             <Badge variant={getStatusVariant(task.status)}>
               {getStatusText(task.status)}
             </Badge>
+            {isClickable && (
+              <span className="text-xs text-blue-600 dark:text-blue-400 ml-1">点击查看</span>
+            )}
           </div>
         </div>
       </CardContent>

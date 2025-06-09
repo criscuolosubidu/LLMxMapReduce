@@ -69,6 +69,20 @@ interface UserTasksResponse {
   message?: string;
 }
 
+// 任务输出响应接口
+interface TaskOutputResponse {
+  success: boolean;
+  content: string;
+  source: 'database' | 'file';
+  message?: string;
+  output_file?: string;
+  metadata?: {
+    created_at: string;
+    title: string;
+    status: string;
+  };
+}
+
 const API_BASE_URL = 'http://localhost:5000';
 
 // 发送验证码
@@ -212,6 +226,35 @@ export async function getUserTasks(
 
   if (!response.ok) {
     throw new Error('获取任务列表失败');
+  }
+
+  return response.json();
+}
+
+// 获取任务输出内容
+export async function getTaskOutput(token: string, taskId: string): Promise<TaskOutputResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/output/${taskId}`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    
+    if (response.status === 400) {
+      throw new Error(errorData.message || '任务尚未完成');
+    } else if (response.status === 401) {
+      throw new Error('未授权访问');
+    } else if (response.status === 403) {
+      throw new Error('无权访问该任务结果');
+    } else if (response.status === 404) {
+      throw new Error('任务不存在或输出结果不存在');
+    } else {
+      throw new Error(errorData.message || '获取任务输出失败');
+    }
   }
 
   return response.json();

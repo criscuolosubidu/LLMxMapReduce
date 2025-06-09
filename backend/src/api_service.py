@@ -345,6 +345,7 @@ def list_user_tasks():
 
 
 @api_bp.route('/output/<task_id>', methods=['GET'])
+@jwt_required_custom
 def get_task_output(task_id: str):
     """获取任务输出结果
     
@@ -355,66 +356,102 @@ def get_task_output(task_id: str):
         content: 输出内容
         source: 数据来源（database/file）
     """
-    task_manager = get_task_manager()
-    task = task_manager.get_task(task_id)
-    
-    if not task:
-        return jsonify({
-            'success': False,
-            'message': '任务不存在'
-        }), 404
-    
-    if task['status'] != TaskStatus.COMPLETED.value:
-        return jsonify({
-            'success': False,
-            'message': f"任务尚未完成，当前状态：{task['status']}"
-        }), 400
-    
-    # 优先从数据库获取
     try:
-        from src.database.mongo_manager import get_mongo_manager
-        mongo_manager = get_mongo_manager()
-        if mongo_manager:
-            survey = mongo_manager.get_survey(task_id)
-            if survey and survey.get('survey_data'):
-                logger.info(f"从数据库获取任务结果: {task_id}")
-                return jsonify({
-                    'success': True,
-                    'content': json.dumps(survey['survey_data'], ensure_ascii=False, indent=2),
-                    'source': 'database',
-                    'metadata': {
-                        'created_at': survey.get('created_at'),
-                        'title': survey.get('title'),
-                        'status': survey.get('status')
-                    }
-                })
-    except Exception as e:
-        logger.warning(f"从数据库获取任务结果失败: {task_id}, error: {str(e)}")
-    
-    # 备选：从文件获取
-    output_file = task['params'].get('output_file')
-    if output_file and os.path.exists(output_file):
-        try:
-            with open(output_file, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
-            logger.info(f"从文件获取任务结果: {task_id}")
-            return jsonify({
-                'success': True,
-                'content': content,
-                'source': 'file',
-                'output_file': output_file
-            })
-        except Exception as e:
+        # 获取当前用户ID
+        current_user_id = get_jwt_identity()
+        if not current_user_id:
             return jsonify({
                 'success': False,
-                'message': f"读取输出文件失败: {str(e)}"
-            }), 500
-    
-    return jsonify({
-        'success': False,
-        'message': '输出结果不存在（数据库和文件都无法找到）'
-    }), 404
+                'message': '无法获取用户信息'
+            }), 401
+        
+        task_manager = get_task_manager()
+        task = task_manager.get_task(task_id)
+        
+        if not task:
+            return jsonify({
+                'success': False,
+                'message': '任务不存在'
+            }), 404
+        
+        # 验证任务是否属于当前用户
+        task_user_id = task['params'].get('user_id')
+        if task_user_id != current_user_id:
+            return jsonify({
+                'success': False,
+                'message': '无权访问该任务结果'
+            }), 403
+        
+        if task['status'] != TaskStatus.COMPLETED.value:
+            return jsonify({
+                'success': False,
+                'message': f"任务尚未完成，当前状态：{task['status']}"
+            }), 400
+        
+        # 优先从数据库获取
+        try:
+            from src.database.mongo_manager import get_mongo_manager
+            mongo_manager = get_mongo_manager()
+            if mongo_manager:
+                survey = mongo_manager.get_survey(task_id)
+                if survey and survey.get('survey_data'):
+                    logger.info(f"从数据库获取任务结果: {task_id}")
+                    # 格式化 survey
+                    try:
+                        article_data = survey['survey_data']
+                    except Exception as e:
+                        logger.error(f"格式化 survey 失败: {e}")
+                        return jsonify({
+                            'success': False,
+                            'message': f"survey 数据格式不正确"
+                        }), 500
+                    article = article_data["content"] + "\n\n" + article_data['ref_str']
+                    return jsonify({
+                        'success': True,
+                        'message': '任务结果获取成功',
+                        'content': article,
+                        'source': 'database',
+                        'metadata': {
+                            'created_at': survey.get('created_at'),
+                            'title': survey.get('title'),
+                            'status': survey.get('status')
+                        }
+                    })
+        except Exception as e:
+            logger.warning(f"从数据库获取任务结果失败: {task_id}, error: {str(e)}")
+        
+        # 备选：从文件获取
+        output_file = task['params'].get('output_file')
+        if output_file and os.path.exists(output_file):
+            try:
+                with open(output_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                logger.info(f"从文件获取任务结果: {task_id}")
+                return jsonify({
+                    'success': True,
+                    'message': '任务结果获取成功',
+                    'content': content,
+                    'source': 'file',
+                    'output_file': output_file
+                })
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'message': f"读取输出文件失败: {str(e)}"
+                }), 500
+        
+        return jsonify({
+            'success': False,
+            'message': '输出结果不存在'
+        }), 404
+        
+    except Exception as e:
+        logger.exception("获取任务输出结果失败")
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
 
 
 @api_bp.route('/database/stats', methods=['GET'])
@@ -532,44 +569,3 @@ def health_check():
             }
         }
     }), 200 if all_healthy else 503
-
-
-@api_bp.route('/user/remaining_uses', methods=['GET'])
-@jwt_required_custom
-def get_user_remaining_uses():
-    """获取用户剩余使用次数
-    
-    返回:
-        remaining_uses: 剩余使用次数
-        user_id: 用户ID
-    """
-    try:
-        # 获取当前用户ID
-        current_user_id = get_jwt_identity()
-        if not current_user_id:
-            return jsonify({
-                'success': False,
-                'message': '无法获取用户信息'
-            }), 401
-        
-        # 查询用户信息
-        user = User.query.filter_by(id=current_user_id).first()
-        if not user:
-            return jsonify({
-                'success': False,
-                'message': '用户不存在'
-            }), 404
-        
-        return jsonify({
-            'success': True,
-            'remaining_uses': user.remaining_uses,
-            'user_id': current_user_id,
-            'phone': user.phone
-        })
-        
-    except Exception as e:
-        logger.exception("获取用户剩余使用次数失败")
-        return jsonify({
-            'success': False,
-            'message': str(e)
-        }), 500 
