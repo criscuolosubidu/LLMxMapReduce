@@ -9,7 +9,7 @@ import { Toaster } from 'sonner'
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "ResearchSynth - 智能研究综述生成",
+  title: "MedResearch - 智能研究综述生成",
   description: "输入研究主题，自动收集资料并生成专业研究综述",
     generator: 'v0.dev'
 }

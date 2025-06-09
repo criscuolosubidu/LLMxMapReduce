@@ -11,7 +11,7 @@ export function Header({ showUserNav = true }: HeaderProps) {
     <header className="border-b">
       <div className="container flex h-16 items-center justify-between max-w-6xl mx-auto px-4">
         <Link href={showUserNav ? "/dashboard" : "/"} className="text-2xl font-bold">
-          ResearchSynth
+          MedResearch
         </Link>
         <div className="flex items-center gap-4">
           <ThemeToggle />

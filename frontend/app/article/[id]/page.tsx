@@ -207,9 +207,9 @@ export default function ArticlePage() {
           {isLoading && (
             <div className="flex justify-center py-16">
               <div className="text-center">
-                <div className="relative">
-                  <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin mx-auto mb-6"></div>
-                  <div className="absolute inset-0 w-12 h-12 border-4 border-transparent border-t-blue-300 rounded-full animate-spin mx-auto mt-2 ml-2"></div>
+                <div className="relative w-16 h-16 mx-auto mb-6">
+                  <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin"></div>
+                  <div className="absolute top-2 left-2 w-12 h-12 border-4 border-transparent border-t-blue-300 rounded-full animate-spin [animation-direction:reverse]"></div>
                 </div>
                 <p className="text-xl font-medium text-slate-700 dark:text-slate-300">正在加载精彩内容...</p>
                 <p className="text-sm text-muted-foreground mt-2">请稍候片刻</p>
