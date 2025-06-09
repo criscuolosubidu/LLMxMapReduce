@@ -1,13 +1,18 @@
+"use client"
+
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ArrowRight } from "lucide-react"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
+import { useAuth } from "@/contexts/auth-context"
 
 export default function Home() {
+  const { token, isLoading } = useAuth()
+  
   return (
     <div className="flex flex-col min-h-screen">
-      <Header showUserNav={false} />
+      <Header showUserNav={true} />
       <main className="flex-1">
         <section className="w-full py-12 md:py-24 lg:py-32">
           <div className="container px-4 md:px-6 max-w-6xl mx-auto">
@@ -18,12 +23,14 @@ export default function Home() {
                   输入您的研究主题，我们将自动收集相关资料并生成专业的研究综述。支持中英文，让您的学术研究更加高效。
                 </p>
                 <div className="flex flex-col gap-2 min-[400px]:flex-row">
-                  <Link href="/login">
-                    <Button className="w-full min-[400px]:w-auto">
-                      立即开始
-                      <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                  </Link>
+                  {!isLoading && (
+                    <Link href={token ? "/dashboard" : "/login"}>
+                      <Button className="w-full min-[400px]:w-auto">
+                        立即开始
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Button>
+                    </Link>
+                  )}
                 </div>
               </div>
               <div className="flex justify-center">
