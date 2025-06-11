@@ -169,7 +169,7 @@ class GroupNeuron(Neuron):
         prompt = self.prompt.format(
             survey_title=survey_title,
             titles=papers_info_str,
-            bibkeys=bibkeys,
+            bibkeys=bibkeys,  # 实际上提示词中根本没有 bibkeys 这个格式化的变量，bibkeys 是和 titles一起放到 titles这个格式化变量中
         )
         result = self.request_pool.completion(prompt)
         logger.info(f"Group Generate Finished: {survey_title}")
