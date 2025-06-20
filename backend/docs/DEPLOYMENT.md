@@ -11,7 +11,7 @@
 cd /home/ubuntu/LLMxMapReduce
 docker-compose up -d
 
-# 2. 创建并激活 Conda 环境
+# 2. 创建并激活 Conda 环境（后端）
 cd backend
 conda create -n llm-mapreduce python=3.10 -y
 conda activate llm-mapreduce
@@ -21,12 +21,21 @@ pip install -r requirements.txt
 cp env.docker.template .env
 # 编辑 .env 文件，填入您的 API 密钥和其他配置
 
-# 4. 启动应用（选择其中一种）
-# 使用 uWSGI
+# 4. 启动后端应用
 ./scripts/deploy_uwsgi.sh
+
+# 5. 部署前端应用
+cd ../frontend
+pnpm install
+pnpm build
+
+# 6. 启动前端服务（systemd）
+sudo systemctl start llmxmapreduce-frontend.service
 ```
 
-应用将在 http://localhost:5000 启动。
+应用将在以下地址启动：
+- 后端 API: http://localhost:5000
+- 前端应用: http://localhost:3000
 
 ## 📋 部署前准备
 
@@ -35,6 +44,7 @@ cp env.docker.template .env
 - Docker 20.10+
 - Docker Compose 2.0+
 - Anaconda 或 Miniconda
+- Node.js 18+ 和 pnpm (前端)
 - Nginx (推荐用作反向代理)
 
 ### 2. 安装系统依赖
@@ -60,6 +70,13 @@ sudo chmod +x /usr/local/bin/docker-compose
 wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
 bash Miniconda3-latest-Linux-x86_64.sh
 source ~/.bashrc
+
+# 安装 Node.js 和 pnpm（前端依赖）
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+source ~/.bashrc
+nvm install 22
+nvm use 22
+npm install -g pnpm
 
 # 安装编译相关依赖
 sudo apt install -y libpq-dev libssl-dev libffi-dev
@@ -171,7 +188,7 @@ sudo chmod -R 755 logs static
 
 ## 🔧 部署方案
 
-### 方案一：使用 uWSGI 部署
+### 方案一：使用 uWSGI 部署（后端）
 
 #### 1. 修改 uWSGI 配置
 uWSGI 配置文件已经设置为使用 `ubuntu` 用户：
@@ -190,6 +207,99 @@ gid = ubuntu
 conda activate llm-mapreduce
 uwsgi --ini uwsgi.ini
 ```
+
+### 方案二：前端部署（Next.js + systemd）
+
+#### 1. 前端构建
+```bash
+cd /home/ubuntu/LLMxMapReduce/frontend
+
+# 安装依赖
+pnpm install
+
+# 构建项目
+pnpm build
+```
+
+#### 2. 创建 systemd 服务
+
+首先确认 pnpm 路径：
+```bash
+which pnpm
+```
+
+创建 systemd 服务文件 `/etc/systemd/system/llmxmapreduce-frontend.service`：
+```ini
+[Unit]
+Description=LLMxMapReduce Frontend Service  
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/LLMxMapReduce/frontend
+ExecStart=/home/ubuntu/.nvm/versions/node/v22.16.0/bin/pnpm start
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+Environment=PATH=/home/ubuntu/.nvm/versions/node/v22.16.0/bin:/usr/bin:/usr/local/bin
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=llmx-frontend
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**注意**：请根据您的实际 pnpm 路径调整 `ExecStart` 和 `Environment` 中的路径。
+
+#### 3. 启动前端服务
+```bash
+# 重新加载 systemd 配置
+sudo systemctl daemon-reload
+
+# 启用开机自启
+sudo systemctl enable llmxmapreduce-frontend.service
+
+# 启动服务
+sudo systemctl start llmxmapreduce-frontend.service
+
+# 检查服务状态
+sudo systemctl status llmxmapreduce-frontend.service
+```
+
+#### 4. 前端服务管理命令
+```bash
+# 查看服务状态
+sudo systemctl status llmxmapreduce-frontend.service
+
+# 启动服务
+sudo systemctl start llmxmapreduce-frontend.service
+
+# 停止服务
+sudo systemctl stop llmxmapreduce-frontend.service
+
+# 重启服务
+sudo systemctl restart llmxmapreduce-frontend.service
+
+# 查看服务日志
+sudo journalctl -u llmxmapreduce-frontend.service -f
+
+# 禁用开机自启
+sudo systemctl disable llmxmapreduce-frontend.service
+
+# 启用开机自启
+sudo systemctl enable llmxmapreduce-frontend.service
+```
+
+#### 5. 前端服务特性
+- **自动重启**: 如果应用崩溃，会自动重启
+- **开机自启**: 系统重启后自动启动  
+- **日志管理**: 日志输出到系统日志
+- **用户权限**: 以 ubuntu 用户身份运行
+- **环境配置**: 生产环境模式
+- **默认端口**: 3000
 
 ## 🌐 Nginx 反向代理配置
 
@@ -369,15 +479,21 @@ docker run --rm -v llmxmapreduce_postgresql-data:/data -v $(pwd):/backup alpine 
 
 ### 1. 查看服务状态
 ```bash
-# 查看应用服务状态
+# 查看后端应用服务状态
 sudo systemctl status llm-mapreduce-uwsgi.service
 # 或
 sudo systemctl status llm-mapreduce-gunicorn.service
+
+# 查看前端应用服务状态
+sudo systemctl status llmxmapreduce-frontend.service
 
 # 查看实时日志
 sudo journalctl -u llm-mapreduce-uwsgi.service -f
 # 或
 sudo journalctl -u llm-mapreduce-gunicorn.service -f
+
+# 查看前端实时日志
+sudo journalctl -u llmxmapreduce-frontend.service -f
 ```
 
 ### 2. 查看应用日志
