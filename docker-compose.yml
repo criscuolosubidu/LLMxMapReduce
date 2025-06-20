@@ -9,6 +9,22 @@ services:
       - "27017:27017"
     volumes:
       - mongodb-data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: llm_survey
+
+  postgresql:
+    image: postgres:15
+    container_name: postgresql
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: huanyu
+      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: llm_survey
+    volumes:
+      - postgresql-data:/var/lib/postgresql/data
 
 volumes:
   mongodb-data:
+  postgresql-data:
