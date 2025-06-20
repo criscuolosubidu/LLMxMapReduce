@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -18,7 +18,7 @@ import { Loader2, Gift, CreditCard, Sparkles } from "lucide-react"
 import { getUserInfo, redeemCode } from "@/lib/api"
 import { toast } from "sonner"
 
-export default function SettingsPage() {
+function SettingsContent() {
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState("profile")
   const [phoneNumber, setPhoneNumber] = useState("")
@@ -34,7 +34,6 @@ export default function SettingsPage() {
     browser: true,
   })
   const { theme, setTheme } = useTheme()
-
 
   // 兑换码套餐配置
   const codePackages = [
@@ -423,5 +422,13 @@ export default function SettingsPage() {
       </main>
       <Footer />
     </div>
+  )
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+      <SettingsContent />
+    </Suspense>
   )
 }
