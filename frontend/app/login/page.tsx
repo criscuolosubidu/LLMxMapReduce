@@ -83,8 +83,8 @@ export default function LoginPage() {
         // 使用AuthContext的login方法来保存状态
         authLogin(response.data.token, response.data.user)
         
-        // 跳转到dashboard
-        router.push("/dashboard")
+        // 跳转到主页
+        router.push("/")
       } else {
         toast.error(response.message || "登录/注册失败")
       }
