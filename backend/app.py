@@ -184,10 +184,19 @@ class Application:
         self.app.register_blueprint(auth_bp, url_prefix='/auth')
         self.app.register_blueprint(redemption_bp, url_prefix='/redemption')
         
-        # 创建数据库表
         with self.app.app_context():
-            db.create_all()
-            self.logger.info("数据库表已创建")
+            try:
+                # 创建所有表（默认会检查表是否已存在，避免重复创建）
+                db.create_all()
+                self.logger.info("数据库表已创建/验证")
+                    
+            except Exception as e:
+                self.logger.error(f"数据库表创建/验证失败: {str(e)}")
+                # 如果是重复创建错误，可以继续运行
+                if "already exists" in str(e) or "duplicate key" in str(e):
+                    self.logger.warning("数据库表已存在，继续运行")
+                else:
+                    raise
         
         # 初始化组件
         self.global_pipeline = None
@@ -298,8 +307,9 @@ class Application:
         return status
     
     def run(self):
-        """运行应用程序"""
+        """运行应用程序（仅用于开发环境）"""
         self.logger.info(f"Web服务器启动在 {self.config.api.host}:{self.config.api.port}")
+        self.logger.warning("正在使用开发服务器！生产环境请使用 wsgi.py")
         
         try:
             self.app.run(
