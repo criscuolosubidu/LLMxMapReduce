@@ -148,52 +148,6 @@ export default function DashboardPage() {
     task.params.topic.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  // 获取状态显示文本
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return '待处理'
-      case 'preparing':
-        return '准备中'
-      case 'searching':
-        return '生成查询中'
-      case 'searching_web':
-        return '搜索网页中'
-      case 'crawling':
-        return '爬取内容中'
-      case 'processing':
-        return '处理中'
-      case 'completed':
-        return '已完成'
-      case 'failed':
-        return '失败'
-      case 'timeout':
-        return '超时'
-      default:
-        return status
-    }
-  }
-
-  // 获取状态颜色
-  const getStatusVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
-    switch (status) {
-      case 'completed':
-        return 'default'
-      case 'preparing':
-      case 'searching':
-      case 'searching_web':
-      case 'crawling':
-      case 'processing':
-        return 'secondary'
-      case 'failed':
-      case 'timeout':
-        return 'destructive'
-      case 'pending':
-      default:
-        return 'outline'
-    }
-  }
-
   return (
     <div className="flex min-h-screen flex-col">
       <Header />

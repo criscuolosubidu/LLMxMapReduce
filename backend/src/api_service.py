@@ -9,6 +9,7 @@ import logging
 from typing import Dict, Any, Optional
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import get_jwt_identity
+from datetime import datetime, timezone, timedelta
 
 from src.task_manager import TaskStatus, get_task_manager
 from src.pipeline_processor import PipelineTaskManager
@@ -109,6 +110,12 @@ def submit_task():
         # 获取任务信息
         task_manager = get_task_manager()
         task = task_manager.get_task(task_id)
+        
+        if task is None:
+            return jsonify({
+                'success': False,
+                'message': '任务不存在'
+            }), 404
         
         return jsonify({
             'success': True,
@@ -327,6 +334,48 @@ def list_user_tasks():
             status=status_enum, 
             limit=limit
         )
+        
+        # 检查任务是否超时（超过 3 小时未完成视为超时）
+        try:
+            now_utc = datetime.now(timezone.utc)
+            timeout_threshold = timedelta(hours=3)
+            for task in tasks:
+                # 已结束状态无需处理
+                if task.get('status') in [
+                    TaskStatus.COMPLETED.value,
+                    TaskStatus.FAILED.value,
+                    TaskStatus.TIMEOUT.value
+                ]:
+                    continue
+
+                created_at_str = task.get('created_at')
+                if not created_at_str:
+                    continue
+
+                # 解析时间字符串
+                try:
+                    created_at = datetime.fromisoformat(created_at_str)
+                except Exception:
+                    # 时间格式异常，忽略
+                    continue
+
+                # 补充时区信息
+                if created_at.tzinfo is None:
+                    created_at = created_at.replace(tzinfo=timezone.utc)
+
+                if now_utc - created_at > timeout_threshold:
+                    task_id_for_update = task.get('id') or task.get('task_id')
+                    if task_id_for_update:
+                        task_manager.update_task_status(
+                            task_id_for_update,
+                            TaskStatus.TIMEOUT,
+                            error="任务超时"
+                        )
+                        # 同步更新本地任务对象，确保返回信息一致
+                        task['status'] = TaskStatus.TIMEOUT.value
+                        task['error'] = '任务超时'
+        except Exception as e:
+            logger.warning(f"检查任务超时时出现异常: {e}")
         
         return jsonify({
             'success': True,

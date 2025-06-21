@@ -11,7 +11,12 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "MedResearch - 智能研究综述生成",
   description: "输入研究主题，自动收集资料并生成专业研究综述",
-    generator: 'v0.dev'
+  generator: 'v0.dev',
+  icons: {
+    icon: '/favicon.png',
+    shortcut: '/favicon.png',
+    apple: '/favicon.png'
+  }
 }
 
 export default function RootLayout({
