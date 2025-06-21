@@ -66,7 +66,7 @@ def submit_task():
             }), 401
         
         # 检查用户剩余使用次数
-        user = User.query.filter_by(id=current_user_id).first()
+        user = User.query.filter_by(id=int(current_user_id)).first()
         if not user:
             return jsonify({
                 'success': False,
@@ -323,7 +323,7 @@ def list_user_tasks():
         
         # 根据用户ID获取任务列表
         tasks = task_manager.list_tasks_by_user(
-            user_id=current_user_id, 
+            user_id=int(current_user_id), 
             status=status_enum, 
             limit=limit
         )
@@ -333,7 +333,7 @@ def list_user_tasks():
             'message': '用户任务列表获取成功',
             'tasks': tasks,
             'count': len(tasks),
-            'user_id': current_user_id
+            'user_id': int(current_user_id)
         })
         
     except Exception as e:
@@ -376,7 +376,7 @@ def get_task_output(task_id: str):
         
         # 验证任务是否属于当前用户
         task_user_id = task['params'].get('user_id')
-        if task_user_id != current_user_id:
+        if task_user_id != int(current_user_id):
             return jsonify({
                 'success': False,
                 'message': '无权访问该任务结果'

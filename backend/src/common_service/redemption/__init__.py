@@ -45,7 +45,7 @@ def generate_code():
 def redeem_code():
     """兑换码使用"""
     user_id = get_jwt_identity()
-    user = User.query.get(user_id)
+    user = User.query.get(int(user_id))
     
     if not user:
         return api_response(message="用户不存在", status=404)
@@ -93,7 +93,7 @@ def get_redemption_history():
     """获取用户兑换历史"""
     user_id = get_jwt_identity()
     
-    records = RedemptionRecord.query.filter_by(user_id=user_id).order_by(
+    records = RedemptionRecord.query.filter_by(user_id=int(user_id)).order_by(
         RedemptionRecord.redeemed_at.desc()
     ).all()
     

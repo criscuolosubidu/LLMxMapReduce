@@ -122,7 +122,7 @@ def login():
         db.session.commit()
 
     # 生成JWT令牌
-    access_token = create_access_token(identity=user.id)
+    access_token = create_access_token(identity=str(user.id))
 
     return api_response(
         data={
@@ -142,7 +142,7 @@ def login():
 def get_user_info():
     """获取用户信息"""
     user_id = get_jwt_identity()
-    user = User.query.get(user_id)
+    user = User.query.get(int(user_id))
 
     if not user:
         return api_response(message="用户不存在", status=404)

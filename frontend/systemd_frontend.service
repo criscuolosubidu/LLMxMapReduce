@@ -1,0 +1,20 @@
+[Unit]
+Description=LLMxMapReduce Frontend Service  
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/LLMxMapReduce/frontend
+ExecStart=/home/ubuntu/.nvm/versions/node/v22.16.0/bin/pnpm start
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+Environment=PATH=/home/ubuntu/.nvm/versions/node/v22.16.0/bin:/usr/bin:/usr/local/bin
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=llmx-frontend
+
+[Install]
+WantedBy=multi-user.target 
