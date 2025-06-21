@@ -7,13 +7,13 @@ Type=simple
 User=ubuntu
 Group=ubuntu
 WorkingDirectory=/home/ubuntu/LLMxMapReduce/frontend
-ExecStart=/home/ubuntu/.nvm/versions/node/v22.16.0/bin/pnpm start
+ExecStart=/usr/bin/pnpm start
 Restart=always
 RestartSec=10
 Environment=NODE_ENV=production
-Environment=PATH=/home/ubuntu/.nvm/versions/node/v22.16.0/bin:/usr/bin:/usr/local/bin
-StandardOutput=syslog
-StandardError=syslog
+Environment=PATH=/usr/bin:/usr/local/bin
+StandardOutput=append:/home/ubuntu/LLMxMapReduce/frontend/logs/systemd.log
+StandardError=append:/home/ubuntu/LLMxMapReduce/frontend/logs/systemd_error.log
 SyslogIdentifier=llmx-frontend
 
 [Install]
