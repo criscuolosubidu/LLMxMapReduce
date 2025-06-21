@@ -87,8 +87,8 @@ def submit_task():
                 'message': '请求参数不能为空'
             }), 400
         
-        # 添加用户ID到参数中
-        params['user_id'] = current_user_id
+        # 添加用户ID到参数中（确保类型为整数）
+        params['user_id'] = int(current_user_id)
         
         logger.info(f"收到Pipeline请求: {params}")
         
@@ -376,7 +376,8 @@ def get_task_output(task_id: str):
         
         # 验证任务是否属于当前用户
         task_user_id = task['params'].get('user_id')
-        if task_user_id != int(current_user_id):
+        # 确保类型一致性：都转换为整数进行比较
+        if int(task_user_id) != int(current_user_id):
             return jsonify({
                 'success': False,
                 'message': '无权访问该任务结果'
