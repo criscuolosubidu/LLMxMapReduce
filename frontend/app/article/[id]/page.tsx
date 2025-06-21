@@ -17,6 +17,7 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import 'katex/dist/katex.min.css'
 import { Separator } from "@/components/ui/separator"
+import mermaid from 'mermaid'
 
 interface TaskOutputResponse {
   success: boolean;
@@ -31,11 +32,153 @@ interface TaskOutputResponse {
   };
 }
 
+// Mermaid 图表组件
+const MermaidChart = ({ content, title }: { content: string; title?: string }) => {
+  const [svgContent, setSvgContent] = useState<string>('')
+  const [error, setError] = useState<string>('')
+
+  useEffect(() => {
+    const renderMermaid = async () => {
+      try {
+        // 初始化 mermaid
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: 'default',
+          securityLevel: 'loose',
+          fontFamily: 'ui-serif, serif',
+          fontSize: 14,
+        })
+
+        // 生成唯一ID
+        const id = `mermaid-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        
+        // 渲染图表
+        const { svg } = await mermaid.render(id, content)
+        setSvgContent(svg)
+        setError('')
+      } catch (err) {
+        console.error('Mermaid rendering error:', err)
+        setError('图表渲染失败')
+      }
+    }
+
+    if (content) {
+      renderMermaid()
+    }
+  }, [content])
+
+  if (error) {
+    return (
+      <div className="my-8 p-6 border border-red-200 rounded-lg bg-red-50 dark:border-red-800 dark:bg-red-950">
+        <p className="text-red-600 dark:text-red-400 text-center">{error}</p>
+        <details className="mt-2">
+          <summary className="text-sm text-red-500 cursor-pointer">查看原始内容</summary>
+          <pre className="mt-2 p-2 bg-red-100 dark:bg-red-900 rounded text-xs overflow-x-auto">
+            {content}
+          </pre>
+        </details>
+      </div>
+    )
+  }
+
+  return (
+    <figure className="my-8">
+      {title && (
+        <figcaption className="text-center text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">
+          {title}
+        </figcaption>
+      )}
+      <div className="flex justify-center p-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm border">
+        {svgContent ? (
+          <div dangerouslySetInnerHTML={{ __html: svgContent }} />
+        ) : (
+          <div className="flex items-center justify-center p-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+            <span className="ml-2 text-sm text-slate-500">正在渲染图表...</span>
+          </div>
+        )}
+      </div>
+    </figure>
+  )
+}
+
+// 自定义 markdown 预处理函数
+const preprocessMarkdown = (content: string): string => {
+  // console.log("🔍 [preprocessMarkdown] 开始处理内容，原始内容长度:", content.length)
+  // console.log("📝 [preprocessMarkdown] 原始内容预览:", content.substring(0, 200) + (content.length > 200 ? "..." : ""))
+
+  /**
+   * 第一步：使用一个宽松的正则先把 <figure-link ...>...</figure-link> 或自闭合的 <figure-link .../> 全部找出来。
+   *   1. 先匹配到 "<figure-link" 开头。
+   *   2. "[\s\S]*?" 懒惰匹配直到遇到 "/>"（自闭合）或 "</figure-link>"（成对闭合）。
+   * 这样可以大幅减少对标签内部结构的依赖。
+   */
+  const figureLinkRegex = /<figure-link[\s\S]*?(?:<\/figure-link>|\/>)/gi
+
+  // 统计匹配数量方便调试
+  const matchedLinks = content.match(figureLinkRegex) || []
+  // console.log("🎯 [preprocessMarkdown] 找到匹配项数量:", matchedLinks.length)
+
+  /**
+   * 使用 replace + DOMParser 提取属性，而不是依赖复杂正则。
+   * DOMParser 在浏览器端可用，并且能够正确解析带有引号、转义符等复杂情况的属性值。
+   */
+  const processed = content.replace(figureLinkRegex, (match) => {
+    try {
+      // 通过 DOMParser 解析标签
+      const parser = new DOMParser()
+      const doc = parser.parseFromString(match, "text/html")
+      const el = doc.querySelector("figure-link") as HTMLElement | null
+
+      if (!el) {
+        // console.warn("⚠️ [preprocessMarkdown] DOMParser 未能解析 figure-link，保持原样")
+        return match
+      }
+
+      const type = el.getAttribute("type") || ""
+      const title = el.getAttribute("title") || ""
+      let figContent = el.getAttribute("content") || ""
+
+      // console.log("📍 [preprocessMarkdown] 解析属性:", { title, type, figContentPreview: figContent.substring(0, 50) + (figContent.length > 50 ? "..." : "") })
+
+      // 仅对 mermaid 类型进行特殊处理
+      if (type.toLowerCase() === "mermaid") {
+        // 解码转义字符（保持与旧逻辑一致）
+        const decodedContent = figContent
+          .replace(/\\n/g, "\n")
+          .replace(/\\'/g, "'")
+          .replace(/\\"/g, '"')
+
+        const markerPayload = {
+          title,
+          content: decodedContent,
+        }
+        const replacement = `\n\n<!-- MERMAID_CHART:${Buffer.from(JSON.stringify(markerPayload)).toString("base64")} -->\n\n`
+        // console.log("✅ [preprocessMarkdown] 生成 Mermaid 标记替换内容")
+        return replacement
+      }
+
+      // 其余类型保持原样
+      // console.log("ℹ️ [preprocessMarkdown] 非 mermaid 类型或未识别，保持原样")
+      return match
+    } catch (err) {
+      // console.error("❌ [preprocessMarkdown] 处理 figure-link 失败，保持原样:", err)
+      return match
+    }
+  })
+
+  // console.log("🏁 [preprocessMarkdown] 处理完成，结果长度:", processed.length)
+  // console.log("📤 [preprocessMarkdown] 结果预览:", processed.substring(0, 200) + (processed.length > 200 ? "..." : ""))
+
+  return processed
+}
+
 export default function ArticlePage() {
   const [article, setArticle] = useState<TaskOutputResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [readingTime, setReadingTime] = useState(0)
+  const [processedContent, setProcessedContent] = useState<string>('')
   const { token, isLoading: authLoading } = useAuth()
   const router = useRouter()
   const params = useParams()
@@ -68,6 +211,9 @@ export default function ArticlePage() {
       setArticle(response)
       if (response.content) {
         setReadingTime(calculateReadingTime(response.content))
+        // 预处理 markdown 内容
+        const processed = preprocessMarkdown(response.content)
+        setProcessedContent(processed)
       }
     } catch (error: any) {
       setError(error.message || "获取文章内容失败")
@@ -152,6 +298,160 @@ export default function ArticlePage() {
     }
   }
 
+  // 自定义渲染器，处理 Mermaid 图表
+  const CustomMarkdown = ({ content }: { content: string }) => {
+    // 分割内容，提取 Mermaid 图表
+    const parts = content.split(/<!-- MERMAID_CHART:([^>]+) -->/g)
+    
+    return (
+      <>
+        {parts.map((part, index) => {
+          // 偶数索引是普通文本，奇数索引是 Mermaid 数据
+          if (index % 2 === 0) {
+            // 普通 markdown 内容
+            return (
+              <ReactMarkdown 
+                key={index}
+                remarkPlugins={[remarkGfm, remarkMath]}
+                rehypePlugins={[rehypeKatex]}
+                components={{
+                  // ... 保持原有的所有组件配置 ...
+                  h1: ({ children, ...props }) => (
+                    <h1 {...props} className="text-4xl font-bold text-slate-900 dark:text-slate-100 mb-8 pb-4 border-b border-slate-200 dark:border-slate-700 leading-tight font-serif">
+                      {children}
+                    </h1>
+                  ),
+                  h2: ({ children, ...props }) => (
+                    <h2 {...props} className="text-3xl font-bold text-slate-800 dark:text-slate-200 mt-12 mb-6 leading-tight font-serif">
+                      {children}
+                    </h2>
+                  ),
+                  h3: ({ children, ...props }) => (
+                    <h3 {...props} className="text-2xl font-semibold text-slate-700 dark:text-slate-300 mt-8 mb-4 leading-tight font-serif">
+                      {children}
+                    </h3>
+                  ),
+                  h4: ({ children, ...props }) => (
+                    <h4 {...props} className="text-xl font-semibold text-slate-600 dark:text-slate-400 mt-6 mb-3 leading-tight font-serif">
+                      {children}
+                    </h4>
+                  ),
+                  p: ({ children, ...props }) => (
+                    <p {...props} className="text-base leading-7 text-slate-800 dark:text-slate-200 mb-4 text-justify font-serif tracking-wide">
+                      {children}
+                    </p>
+                  ),
+                  ul: ({ children, ...props }) => (
+                    <ul {...props} className="list-disc list-outside space-y-1 mb-4 ml-6 text-slate-800 dark:text-slate-200 font-serif">
+                      {children}
+                    </ul>
+                  ),
+                  ol: ({ children, ...props }) => (
+                    <ol {...props} className="list-decimal list-outside space-y-1 mb-4 ml-6 text-slate-800 dark:text-slate-200 font-serif">
+                      {children}
+                    </ol>
+                  ),
+                  li: ({ children, ...props }) => (
+                    <li {...props} className="text-base leading-6 mb-1 pl-2">
+                      {children}
+                    </li>
+                  ),
+                  blockquote: ({ children, ...props }) => (
+                    <blockquote {...props} className="border-l-3 border-slate-400 dark:border-slate-500 bg-slate-50 dark:bg-slate-800/30 pl-4 pr-3 py-2 my-4 text-slate-700 dark:text-slate-300 font-serif text-sm leading-relaxed">
+                      {children}
+                    </blockquote>
+                  ),
+                  code: ({ children, ...props }) => (
+                    <code {...props} className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-sm font-mono text-blue-600 dark:text-blue-400">
+                      {children}
+                    </code>
+                  ),
+                  pre: ({ children, ...props }) => (
+                    <div className="relative group my-8">
+                      <pre {...props} className="bg-slate-900 dark:bg-slate-950 text-slate-100 p-6 rounded-xl shadow-lg overflow-x-auto">
+                        {children}
+                      </pre>
+                      <button
+                        onClick={() => {
+                          const codeElement = (children as any)?.props?.children;
+                          const code = typeof codeElement === 'string' ? codeElement : '';
+                          navigator.clipboard.writeText(code);
+                          toast.success("代码已复制");
+                        }}
+                        className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity px-3 py-1 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded flex items-center gap-1"
+                      >
+                        <Copy className="h-3 w-3" />
+                        复制
+                      </button>
+                    </div>
+                  ),
+                  table: ({ children, ...props }) => (
+                    <div className="overflow-x-auto my-8 rounded-lg shadow-sm">
+                      <table {...props} className="min-w-full border-collapse bg-white dark:bg-slate-900">
+                        {children}
+                      </table>
+                    </div>
+                  ),
+                  th: ({ children, ...props }) => (
+                    <th {...props} className="bg-slate-100 dark:bg-slate-800 px-6 py-4 text-left font-semibold text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700">
+                      {children}
+                    </th>
+                  ),
+                  td: ({ children, ...props }) => (
+                    <td {...props} className="px-6 py-4 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+                      {children}
+                    </td>
+                  ),
+                  a: ({ href, children, ...props }) => (
+                    <a 
+                      href={href} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      {...props}
+                      className="text-blue-700 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 underline underline-offset-2 decoration-1 hover:decoration-2 transition-all font-serif"
+                    >
+                      {children}
+                    </a>
+                  ),
+                  hr: ({ ...props }) => (
+                    <hr {...props} className="my-12 border-slate-200 dark:border-slate-700" />
+                  ),
+                  strong: ({ children, ...props }) => (
+                    <strong {...props} className="font-bold text-slate-900 dark:text-slate-100">
+                      {children}
+                    </strong>
+                  ),
+                  em: ({ children, ...props }) => (
+                    <em {...props} className="italic text-slate-600 dark:text-slate-400">
+                      {children}
+                    </em>
+                  ),
+                }}
+              >
+                {part}
+              </ReactMarkdown>
+            )
+          } else {
+            // Mermaid 图表数据
+            try {
+              const data = JSON.parse(Buffer.from(part, 'base64').toString())
+              return (
+                <MermaidChart 
+                  key={index}
+                  content={data.content} 
+                  title={data.title} 
+                />
+              )
+            } catch (e) {
+              console.error('Failed to parse Mermaid data:', e)
+              return null
+            }
+          }
+        })}
+      </>
+    )
+  }
+
   return (
     <div className="flex min-h-screen flex-col bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-slate-950 dark:via-slate-900 dark:to-blue-950">
       <Header />
@@ -211,7 +511,7 @@ export default function ArticlePage() {
                   <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin"></div>
                   <div className="absolute top-2 left-2 w-12 h-12 border-4 border-transparent border-t-blue-300 rounded-full animate-spin [animation-direction:reverse]"></div>
                 </div>
-                <p className="text-xl font-medium text-slate-700 dark:text-slate-300">正在加载精彩内容...</p>
+                <p className="text-xl font-medium text-slate-700 dark:text-slate-300">正在加载...</p>
                 <p className="text-sm text-muted-foreground mt-2">请稍候片刻</p>
               </div>
             </div>
@@ -271,10 +571,9 @@ export default function ArticlePage() {
                 </CardHeader>
               </Card>
 
-                            {/* 文章正文 */}
+              {/* 文章正文 */}
               <Card className="border-0 shadow-xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm">
                 <CardContent className="p-0">
-                  {/* 文章内容区域 */}
                   <div className="p-8 lg:p-12">
                     <div className="markdown-content font-serif">
                       <style jsx>{`
@@ -295,134 +594,7 @@ export default function ArticlePage() {
                           word-break: break-all;
                         }
                       `}</style>
-                      <ReactMarkdown 
-                        remarkPlugins={[remarkGfm, remarkMath]}
-                        rehypePlugins={[rehypeKatex]}
-                        components={{
-                          // 自定义标题渲染
-                          h1: ({ children, ...props }) => (
-                            <h1 {...props} className="text-4xl font-bold text-slate-900 dark:text-slate-100 mb-8 pb-4 border-b border-slate-200 dark:border-slate-700 leading-tight font-serif">
-                              {children}
-                            </h1>
-                          ),
-                          h2: ({ children, ...props }) => (
-                            <h2 {...props} className="text-3xl font-bold text-slate-800 dark:text-slate-200 mt-12 mb-6 leading-tight font-serif">
-                              {children}
-                            </h2>
-                          ),
-                          h3: ({ children, ...props }) => (
-                            <h3 {...props} className="text-2xl font-semibold text-slate-700 dark:text-slate-300 mt-8 mb-4 leading-tight font-serif">
-                              {children}
-                            </h3>
-                          ),
-                          h4: ({ children, ...props }) => (
-                            <h4 {...props} className="text-xl font-semibold text-slate-600 dark:text-slate-400 mt-6 mb-3 leading-tight font-serif">
-                              {children}
-                            </h4>
-                          ),
-                          // 自定义段落渲染
-                          p: ({ children, ...props }) => (
-                            <p {...props} className="text-base leading-7 text-slate-800 dark:text-slate-200 mb-4 text-justify font-serif tracking-wide">
-                              {children}
-                            </p>
-                          ),
-                          // 自定义列表渲染
-                          ul: ({ children, ...props }) => (
-                            <ul {...props} className="list-disc list-outside space-y-1 mb-4 ml-6 text-slate-800 dark:text-slate-200 font-serif">
-                              {children}
-                            </ul>
-                          ),
-                          ol: ({ children, ...props }) => (
-                            <ol {...props} className="list-decimal list-outside space-y-1 mb-4 ml-6 text-slate-800 dark:text-slate-200 font-serif">
-                              {children}
-                            </ol>
-                          ),
-                          li: ({ children, ...props }) => (
-                            <li {...props} className="text-base leading-6 mb-1 pl-2">
-                              {children}
-                            </li>
-                          ),
-                          // 自定义引用渲染
-                          blockquote: ({ children, ...props }) => (
-                            <blockquote {...props} className="border-l-3 border-slate-400 dark:border-slate-500 bg-slate-50 dark:bg-slate-800/30 pl-4 pr-3 py-2 my-4 text-slate-700 dark:text-slate-300 font-serif text-sm leading-relaxed">
-                              {children}
-                            </blockquote>
-                          ),
-                          // 自定义代码渲染
-                          code: ({ children, ...props }) => (
-                            <code {...props} className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-sm font-mono text-blue-600 dark:text-blue-400">
-                              {children}
-                            </code>
-                          ),
-                          // 自定义代码块渲染
-                          pre: ({ children, ...props }) => (
-                            <div className="relative group my-8">
-                              <pre {...props} className="bg-slate-900 dark:bg-slate-950 text-slate-100 p-6 rounded-xl shadow-lg overflow-x-auto">
-                                {children}
-                              </pre>
-                              <button
-                                onClick={() => {
-                                  const codeElement = (children as any)?.props?.children;
-                                  const code = typeof codeElement === 'string' ? codeElement : '';
-                                  navigator.clipboard.writeText(code);
-                                  toast.success("代码已复制");
-                                }}
-                                className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity px-3 py-1 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded flex items-center gap-1"
-                              >
-                                <Copy className="h-3 w-3" />
-                                复制
-                              </button>
-                            </div>
-                          ),
-                          // 自定义表格渲染
-                          table: ({ children, ...props }) => (
-                            <div className="overflow-x-auto my-8 rounded-lg shadow-sm">
-                              <table {...props} className="min-w-full border-collapse bg-white dark:bg-slate-900">
-                                {children}
-                              </table>
-                            </div>
-                          ),
-                          th: ({ children, ...props }) => (
-                            <th {...props} className="bg-slate-100 dark:bg-slate-800 px-6 py-4 text-left font-semibold text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700">
-                              {children}
-                            </th>
-                          ),
-                          td: ({ children, ...props }) => (
-                            <td {...props} className="px-6 py-4 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
-                              {children}
-                            </td>
-                          ),
-                          // 自定义链接渲染
-                          a: ({ href, children, ...props }) => (
-                            <a 
-                              href={href} 
-                              target="_blank" 
-                              rel="noopener noreferrer" 
-                              {...props}
-                              className="text-blue-700 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 underline underline-offset-2 decoration-1 hover:decoration-2 transition-all font-serif"
-                            >
-                              {children}
-                            </a>
-                          ),
-                          // 自定义水平线渲染
-                          hr: ({ ...props }) => (
-                            <hr {...props} className="my-12 border-slate-200 dark:border-slate-700" />
-                          ),
-                          // 自定义强调文本
-                          strong: ({ children, ...props }) => (
-                            <strong {...props} className="font-bold text-slate-900 dark:text-slate-100">
-                              {children}
-                            </strong>
-                          ),
-                          em: ({ children, ...props }) => (
-                            <em {...props} className="italic text-slate-600 dark:text-slate-400">
-                              {children}
-                            </em>
-                          ),
-                        }}
-                      >
-                        {article.content}
-                      </ReactMarkdown>
+                      <CustomMarkdown content={processedContent} />
                     </div>
                   </div>
                 </CardContent>
@@ -474,4 +646,4 @@ export default function ArticlePage() {
       <Footer />
     </div>
   )
-} 
+}

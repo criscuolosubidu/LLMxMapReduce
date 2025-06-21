@@ -9,6 +9,18 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  experimental: {
+    allowedDevOrigins: [
+      'huanyu.ink',
+      '*.huanyu.ink',
+      "https://huanyu.ink",
+      "http://huanyu.ink",
+      "https://www.huanyu.ink",
+      "http://www.huanyu.ink",
+      "https://*.huanyu.ink",
+      "http://*.huanyu.ink",
+    ],
+  },
 }
 
 export default nextConfig
