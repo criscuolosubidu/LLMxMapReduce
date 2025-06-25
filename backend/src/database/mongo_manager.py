@@ -40,7 +40,7 @@ class MongoManager:
         return cls._instance
     
     def __init__(self, 
-                 connection_string: str = None,
+                 connection_string: Optional[str] = None,
                  database_name: str = "llm_survey",
                  collection_name: str = "surveys",
                  crawl_results_collection: str = "crawl_results"):
@@ -243,7 +243,7 @@ class MongoManager:
             return None
     
     def list_surveys(self, 
-                    status: str = None, 
+                    status: Optional[str] = None, 
                     limit: int = 100, 
                     skip: int = 0,
                     sort_by: str = "created_at",
