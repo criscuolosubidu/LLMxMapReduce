@@ -43,10 +43,12 @@ const MermaidChart = ({ content, title }: { content: string; title?: string }) =
         // 初始化 mermaid
         mermaid.initialize({
           startOnLoad: false,
-          theme: 'default',
+          theme: 'base',
           securityLevel: 'loose',
           fontFamily: 'ui-serif, serif',
-          fontSize: 14,
+          themeVariables: { fontSize: '10px' },
+          flowchart: { useMaxWidth: false },   
+          sequence:  { useMaxWidth: false }, 
         })
 
         // 生成唯一ID
@@ -102,13 +104,92 @@ const MermaidChart = ({ content, title }: { content: string; title?: string }) =
   )
 }
 
-// 自定义 markdown 预处理函数
+// Markdown 内容组件
+const MarkdownFigure = ({ content, title }: { content: string; title?: string }) => {
+  return (
+    <figure className="my-8">
+      {title && (
+        <figcaption className="text-center text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">
+          {title}
+        </figcaption>
+      )}
+      <div className="p-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm border">
+        <ReactMarkdown 
+          remarkPlugins={[remarkGfm, remarkMath]}
+          rehypePlugins={[rehypeKatex]}
+          components={{
+            table: ({ children, ...props }) => (
+              <div className="overflow-x-auto rounded-lg shadow-sm">
+                <table {...props} className="min-w-full border-collapse bg-white dark:bg-slate-900">
+                  {children}
+                </table>
+              </div>
+            ),
+            th: ({ children, ...props }) => (
+              <th {...props} className="bg-slate-100 dark:bg-slate-800 px-6 py-4 text-left font-semibold text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700">
+                {children}
+              </th>
+            ),
+            td: ({ children, ...props }) => (
+              <td {...props} className="px-6 py-4 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+                {children}
+              </td>
+            ),
+            p: ({ children, ...props }) => (
+              <p {...props} className="text-base leading-7 text-slate-800 dark:text-slate-200 mb-4 text-justify font-serif tracking-wide">
+                {children}
+              </p>
+            ),
+            ul: ({ children, ...props }) => (
+              <ul {...props} className="list-disc list-outside space-y-1 mb-4 ml-6 text-slate-800 dark:text-slate-200 font-serif">
+                {children}
+              </ul>
+            ),
+            ol: ({ children, ...props }) => (
+              <ol {...props} className="list-decimal list-outside space-y-1 mb-4 ml-6 text-slate-800 dark:text-slate-200 font-serif">
+                {children}
+              </ol>
+            ),
+            li: ({ children, ...props }) => (
+              <li {...props} className="text-base leading-6 mb-1 pl-2">
+                {children}
+              </li>
+            ),
+            strong: ({ children, ...props }) => (
+              <strong {...props} className="font-bold text-slate-900 dark:text-slate-100">
+                {children}
+              </strong>
+            ),
+            em: ({ children, ...props }) => (
+              <em {...props} className="italic text-slate-600 dark:text-slate-400">
+                {children}
+              </em>
+            ),
+            code: ({ children, ...props }) => (
+              <code {...props} className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-sm font-mono text-blue-600 dark:text-blue-400">
+                {children}
+              </code>
+            ),
+          }}
+        >
+          {content}
+        </ReactMarkdown>
+      </div>
+    </figure>
+  )
+}
+
 const preprocessMarkdown = (content: string): string => {
   // console.log("🔍 [preprocessMarkdown] 开始处理内容，原始内容长度:", content.length)
   // console.log("📝 [preprocessMarkdown] 原始内容预览:", content.substring(0, 200) + (content.length > 200 ? "..." : ""))
 
+  // 第一步：修复引用格式中多余的右中括号
+  // 匹配类似 [3,9]] 或 [7,13]] 这样的错误格式，修复为正确的 [3,9] 格式
+  let fixedContent = content.replace(/\[([^\[\]]+)\]\]/g, '[$1]')
+  // console.log("🔧 [preprocessMarkdown] 修复引用格式后的内容长度:", fixedContent.length)
+
   /**
-   * 第一步：使用一个宽松的正则先把 <figure-link ...>...</figure-link> 或自闭合的 <figure-link .../> 全部找出来。
+   * 第二步：使用一个宽松的正则先把 <figure-link ...>...</figure-link> 或自闭合的 <figure-link .../> 全部找出来。
    *   1. 先匹配到 "<figure-link" 开头。
    *   2. "[\s\S]*?" 懒惰匹配直到遇到 "/>"（自闭合）或 "</figure-link>"（成对闭合）。
    * 这样可以大幅减少对标签内部结构的依赖。
@@ -116,22 +197,18 @@ const preprocessMarkdown = (content: string): string => {
   const figureLinkRegex = /<figure-link[\s\S]*?(?:<\/figure-link>|\/>)/gi
 
   // 统计匹配数量方便调试
-  const matchedLinks = content.match(figureLinkRegex) || []
+  const matchedLinks = fixedContent.match(figureLinkRegex) || []
   // console.log("🎯 [preprocessMarkdown] 找到匹配项数量:", matchedLinks.length)
 
-  /**
-   * 使用 replace + DOMParser 提取属性，而不是依赖复杂正则。
-   * DOMParser 在浏览器端可用，并且能够正确解析带有引号、转义符等复杂情况的属性值。
-   */
-  const processed = content.replace(figureLinkRegex, (match) => {
+  const processed = fixedContent.replace(figureLinkRegex, (match) => {
     try {
-      // 通过 DOMParser 解析标签
+      // 通过 DOMParser 解析标签（浏览器环境）
       const parser = new DOMParser()
       const doc = parser.parseFromString(match, "text/html")
       const el = doc.querySelector("figure-link") as HTMLElement | null
 
       if (!el) {
-        // console.warn("⚠️ [preprocessMarkdown] DOMParser 未能解析 figure-link，保持原样")
+        console.warn("⚠️ [preprocessMarkdown] JSDOM 未能解析 figure-link，保持原样")
         return match
       }
 
@@ -141,7 +218,7 @@ const preprocessMarkdown = (content: string): string => {
 
       // console.log("📍 [preprocessMarkdown] 解析属性:", { title, type, figContentPreview: figContent.substring(0, 50) + (figContent.length > 50 ? "..." : "") })
 
-      // 仅对 mermaid 类型进行特殊处理
+      // 对 mermaid 类型进行特殊处理
       if (type.toLowerCase() === "mermaid") {
         // 解码转义字符（保持与旧逻辑一致）
         const decodedContent = figContent
@@ -158,8 +235,25 @@ const preprocessMarkdown = (content: string): string => {
         return replacement
       }
 
+      // 对 markdown 类型进行特殊处理
+      if (type.toLowerCase() === "markdown") {
+        // 解码转义字符
+        const decodedContent = figContent
+          .replace(/\\n/g, "\n")
+          .replace(/\\'/g, "'")
+          .replace(/\\"/g, '"')
+
+        const markerPayload = {
+          title,
+          content: decodedContent,
+        }
+        const replacement = `\n\n<!-- MARKDOWN_FIGURE:${Buffer.from(JSON.stringify(markerPayload)).toString("base64")} -->\n\n`
+        // console.log("✅ [preprocessMarkdown] 生成 Markdown 标记替换内容")
+        return replacement
+      }
+
       // 其余类型保持原样
-      // console.log("ℹ️ [preprocessMarkdown] 非 mermaid 类型或未识别，保持原样")
+      // console.log("ℹ️ [preprocessMarkdown] 非 mermaid/markdown 类型或未识别，保持原样")
       return match
     } catch (err) {
       // console.error("❌ [preprocessMarkdown] 处理 figure-link 失败，保持原样:", err)
@@ -298,20 +392,25 @@ export default function ArticlePage() {
     }
   }
 
-  // 自定义渲染器，处理 Mermaid 图表
+  // 自定义渲染器，处理 Mermaid 图表和 Markdown 图表
   const CustomMarkdown = ({ content }: { content: string }) => {
-    // 分割内容，提取 Mermaid 图表
-    const parts = content.split(/<!-- MERMAID_CHART:([^>]+) -->/g)
-    
-    return (
-      <>
-        {parts.map((part, index) => {
-          // 偶数索引是普通文本，奇数索引是 Mermaid 数据
-          if (index % 2 === 0) {
-            // 普通 markdown 内容
-            return (
+    // 使用正则表达式来匹配和替换图表标记
+    const processContent = (text: string) => {
+      const elements: React.ReactNode[] = []
+      let lastIndex = 0
+      
+      // 匹配所有图表标记
+      const regex = /<!-- (MERMAID_CHART|MARKDOWN_FIGURE):([^>]+) -->/g
+      let match
+      
+      while ((match = regex.exec(text)) !== null) {
+        // 添加标记前的普通文本
+        if (match.index > lastIndex) {
+          const textContent = text.slice(lastIndex, match.index)
+          if (textContent.trim()) {
+            elements.push(
               <ReactMarkdown 
-                key={index}
+                key={`text-${lastIndex}`}
                 remarkPlugins={[remarkGfm, remarkMath]}
                 rehypePlugins={[rehypeKatex]}
                 components={{
@@ -428,28 +527,176 @@ export default function ArticlePage() {
                   ),
                 }}
               >
-                {part}
+                {textContent}
               </ReactMarkdown>
             )
-          } else {
-            // Mermaid 图表数据
-            try {
-              const data = JSON.parse(Buffer.from(part, 'base64').toString())
-              return (
-                <MermaidChart 
-                  key={index}
-                  content={data.content} 
-                  title={data.title} 
-                />
-              )
-            } catch (e) {
-              console.error('Failed to parse Mermaid data:', e)
-              return null
-            }
           }
-        })}
-      </>
-    )
+        }
+        
+        // 处理图表标记
+        const chartType = match[1]
+        const chartData = match[2]
+        
+        try {
+          const data = JSON.parse(Buffer.from(chartData, 'base64').toString())
+          
+          if (chartType === 'MARKDOWN_FIGURE') {
+            elements.push(
+              <MarkdownFigure 
+                key={`chart-${match.index}`}
+                content={data.content} 
+                title={data.title} 
+              />
+            )
+          } else {
+            elements.push(
+              <MermaidChart 
+                key={`chart-${match.index}`}
+                content={data.content} 
+                title={data.title} 
+              />
+            )
+          }
+        } catch (e) {
+          console.error('Failed to parse chart data:', e)
+        }
+        
+        lastIndex = regex.lastIndex
+      }
+      
+      // 添加最后一部分的普通文本
+      if (lastIndex < text.length) {
+        const textContent = text.slice(lastIndex)
+        if (textContent.trim()) {
+          elements.push(
+            <ReactMarkdown 
+              key={`text-${lastIndex}`}
+              remarkPlugins={[remarkGfm, remarkMath]}
+              rehypePlugins={[rehypeKatex]}
+              components={{
+                // ... 使用相同的组件配置 ...
+                h1: ({ children, ...props }) => (
+                  <h1 {...props} className="text-4xl font-bold text-slate-900 dark:text-slate-100 mb-8 pb-4 border-b border-slate-200 dark:border-slate-700 leading-tight font-serif">
+                    {children}
+                  </h1>
+                ),
+                h2: ({ children, ...props }) => (
+                  <h2 {...props} className="text-3xl font-bold text-slate-800 dark:text-slate-200 mt-12 mb-6 leading-tight font-serif">
+                    {children}
+                  </h2>
+                ),
+                h3: ({ children, ...props }) => (
+                  <h3 {...props} className="text-2xl font-semibold text-slate-700 dark:text-slate-300 mt-8 mb-4 leading-tight font-serif">
+                    {children}
+                  </h3>
+                ),
+                h4: ({ children, ...props }) => (
+                  <h4 {...props} className="text-xl font-semibold text-slate-600 dark:text-slate-400 mt-6 mb-3 leading-tight font-serif">
+                    {children}
+                  </h4>
+                ),
+                p: ({ children, ...props }) => (
+                  <p {...props} className="text-base leading-7 text-slate-800 dark:text-slate-200 mb-4 text-justify font-serif tracking-wide">
+                    {children}
+                  </p>
+                ),
+                ul: ({ children, ...props }) => (
+                  <ul {...props} className="list-disc list-outside space-y-1 mb-4 ml-6 text-slate-800 dark:text-slate-200 font-serif">
+                    {children}
+                  </ul>
+                ),
+                ol: ({ children, ...props }) => (
+                  <ol {...props} className="list-decimal list-outside space-y-1 mb-4 ml-6 text-slate-800 dark:text-slate-200 font-serif">
+                    {children}
+                  </ol>
+                ),
+                li: ({ children, ...props }) => (
+                  <li {...props} className="text-base leading-6 mb-1 pl-2">
+                    {children}
+                  </li>
+                ),
+                blockquote: ({ children, ...props }) => (
+                  <blockquote {...props} className="border-l-3 border-slate-400 dark:border-slate-500 bg-slate-50 dark:bg-slate-800/30 pl-4 pr-3 py-2 my-4 text-slate-700 dark:text-slate-300 font-serif text-sm leading-relaxed">
+                    {children}
+                  </blockquote>
+                ),
+                code: ({ children, ...props }) => (
+                  <code {...props} className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-sm font-mono text-blue-600 dark:text-blue-400">
+                    {children}
+                  </code>
+                ),
+                pre: ({ children, ...props }) => (
+                  <div className="relative group my-8">
+                    <pre {...props} className="bg-slate-900 dark:bg-slate-950 text-slate-100 p-6 rounded-xl shadow-lg overflow-x-auto">
+                      {children}
+                    </pre>
+                    <button
+                      onClick={() => {
+                        const codeElement = (children as any)?.props?.children;
+                        const code = typeof codeElement === 'string' ? codeElement : '';
+                        navigator.clipboard.writeText(code);
+                        toast.success("代码已复制");
+                      }}
+                      className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity px-3 py-1 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded flex items-center gap-1"
+                    >
+                      <Copy className="h-3 w-3" />
+                      复制
+                    </button>
+                  </div>
+                ),
+                table: ({ children, ...props }) => (
+                  <div className="overflow-x-auto my-8 rounded-lg shadow-sm">
+                    <table {...props} className="min-w-full border-collapse bg-white dark:bg-slate-900">
+                      {children}
+                    </table>
+                  </div>
+                ),
+                th: ({ children, ...props }) => (
+                  <th {...props} className="bg-slate-100 dark:bg-slate-800 px-6 py-4 text-left font-semibold text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700">
+                    {children}
+                  </th>
+                ),
+                td: ({ children, ...props }) => (
+                  <td {...props} className="px-6 py-4 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+                    {children}
+                  </td>
+                ),
+                a: ({ href, children, ...props }) => (
+                  <a 
+                    href={href} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    {...props}
+                    className="text-blue-700 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 underline underline-offset-2 decoration-1 hover:decoration-2 transition-all font-serif"
+                  >
+                    {children}
+                  </a>
+                ),
+                hr: ({ ...props }) => (
+                  <hr {...props} className="my-12 border-slate-200 dark:border-slate-700" />
+                ),
+                strong: ({ children, ...props }) => (
+                  <strong {...props} className="font-bold text-slate-900 dark:text-slate-100">
+                    {children}
+                  </strong>
+                ),
+                em: ({ children, ...props }) => (
+                  <em {...props} className="italic text-slate-600 dark:text-slate-400">
+                    {children}
+                  </em>
+                ),
+              }}
+            >
+              {textContent}
+            </ReactMarkdown>
+          )
+        }
+      }
+      
+      return elements
+    }
+    
+    return <>{processContent(content)}</>
   }
 
   return (

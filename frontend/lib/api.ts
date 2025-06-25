@@ -84,8 +84,8 @@ interface TaskOutputResponse {
 }
 
 // 使用相对路径，通过nginx代理访问后端API
-// const API_BASE_URL = 'http://localhost:5000';
-const API_BASE_URL = '';
+const API_BASE_URL = 'http://localhost:5000';
+// const API_BASE_URL = '';
 
 // 发送验证码
 export async function sendVerificationCode(phone: string): Promise<ApiResponse> {

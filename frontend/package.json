@@ -46,6 +46,7 @@
     "embla-carousel-react": "8.5.1",
     "highlight.js": "^11.11.1",
     "input-otp": "1.4.1",
+    "jsdom": "^26.1.0",
     "katex": "^0.16.22",
     "lucide-react": "^0.454.0",
     "mermaid": "^11.7.0",
@@ -71,6 +72,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@types/jsdom": "^21.1.7",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
