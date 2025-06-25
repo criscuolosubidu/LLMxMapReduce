@@ -1,4 +1,3 @@
-import re
 from typing import List
 from tenacity import retry, stop_after_attempt, after_log, retry_if_exception_type
 from request import RequestWrapper
@@ -11,22 +10,21 @@ from src.exceptions import (
     MdNotFoundError,
 )
 from src.utils.process_str import (
-    str2list,
     list2str,
     remove_illegal_bibkeys,
-    parse_md_content,
 )
 import logging
 
-logger = logging.getLogger(__name__)
+from src.prompts import PromptsProtocol, get_prompts
 
-from src.prompts import SINGLE_DIGEST_PROMPT
+logger = logging.getLogger(__name__)
 
 
 class DigestModule(Module):
-    def __init__(self, config):
+    def __init__(self, config, language: str = "en"):
         super().__init__()
-        self.module = SingleDigestModule(config)
+        prompts = get_prompts(language)
+        self.module = SingleDigestModule(config, prompts)
 
     def forward(self, survey: Survey):
         outline = survey.skeleton
@@ -38,9 +36,9 @@ class DigestModule(Module):
 
 
 class SingleDigestModule(Module):
-    def __init__(self, config):
+    def __init__(self, config, prompts: PromptsProtocol):
         super().__init__()
-        self.single_digest_neuron = SingleDigestNeuron(config["single"])
+        self.single_digest_neuron = SingleDigestNeuron(config["single"], prompts)
         self.merge_digest_neuron = MergeDigestNeuron(config["merge"])
 
     def forward(self, digest: Digest, outline):
@@ -63,9 +61,9 @@ class SingleDigestModule(Module):
 
 
 class SingleDigestNeuron(Neuron):
-    def __init__(self, config):
+    def __init__(self, config, prompts: PromptsProtocol):
         super().__init__()
-        self.prompt = SINGLE_DIGEST_PROMPT
+        self.prompt = prompts.SINGLE_DIGEST_PROMPT
         self.request_pool = RequestWrapper(
             model=config["model"], infer_type=config["infer_type"]
         )
@@ -96,7 +94,7 @@ class SingleDigestNeuron(Neuron):
         paper_bibkey = paper_info["bibkey"]
         paper_content = paper_info["content"]
         paper_content = paper_content.replace("#", "")
-        prompt = SINGLE_DIGEST_PROMPT.format(
+        prompt = self.prompt.format(
             survey_title=survey_title,
             paper_bibkey=f"{paper_bibkey}",
             paper_content=paper_content,

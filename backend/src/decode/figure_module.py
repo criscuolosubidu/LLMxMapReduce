@@ -15,14 +15,16 @@ from src.exceptions import (
 
 import logging
 
+from src.prompts import PromptsProtocol, get_prompts
+
 logger = logging.getLogger(__name__)
-from src.prompts import CHART_PROMPT
 
 
 class FigureModule(Module):
-    def __init__(self, config):
+    def __init__(self, config, language: str = "en"):
         super().__init__()
-        self.figure_neuron = FigureNeuron(config["chart"])
+        prompts = get_prompts(language)
+        self.figure_neuron = FigureNeuron(config["chart"], prompts)
 
     def forward(self, survey: Survey):
         logger.info(f"Start to process figure for {survey.title}")
@@ -50,12 +52,13 @@ class FigureModule(Module):
 
 
 class FigureNeuron(Neuron):
-    def __init__(self, config):
+    def __init__(self, config, prompts: PromptsProtocol):
         super().__init__()
         self.req_pool = RequestWrapper(
             model=config["model"],
             infer_type=config["infer_type"],
         )
+        self.prompts = prompts
 
     @retry(
         stop=stop_after_attempt(10),
@@ -70,7 +73,7 @@ class FigureNeuron(Neuron):
         ),
     )
     def forward(self, content: str, title_list: List[str]) -> Dict[str, List[str]]:
-        prompt = CHART_PROMPT.format(content=content, title_list=",".join(title_list))
+        prompt = self.prompts.CHART_PROMPT.format(content=content, title_list=",".join(title_list))
         result = self.req_pool.completion(prompt)
         all_sections = defaultdict(list)
         

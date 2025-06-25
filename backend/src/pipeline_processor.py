@@ -72,6 +72,7 @@ class TopicSearchProcessor(TaskProcessor):
             # 提取参数
             topic = params.get('topic')
             description = params.get('description', '')
+            language = params.get('language', 'en')
             top_n = int(params.get('top_n', self.top_n))
             
             # 更新状态：生成查询
@@ -83,7 +84,8 @@ class TopicSearchProcessor(TaskProcessor):
                 model=self.search_model,
                 infer_type=self.infer_type,
                 engine=self.engine,
-                each_query_result=self.each_query_result
+                each_query_result=self.each_query_result,
+                language=language
             )
             
             # 生成查询 - 添加详细的错误处理
@@ -124,7 +126,7 @@ class TopicSearchProcessor(TaskProcessor):
             
             # 执行爬取 - 添加详细的错误处理
             try:
-                crawler = AsyncCrawler(model=self.search_model, infer_type="OpenAI")
+                crawler = AsyncCrawler(model=self.search_model, infer_type="OpenAI", language=language)
                 await crawler.run(
                     topic=topic,
                     url_list=url_list,
@@ -168,7 +170,7 @@ class PipelineTaskManager:
     """
     
     def __init__(self, 
-                 global_pipeline,
+                 pipelines: Dict[str, Any],
                  check_interval: int = 60,
                  timeout: int = 86400,
                  **kwargs):
@@ -176,11 +178,11 @@ class PipelineTaskManager:
         初始化任务管理器
         
         Args:
-            global_pipeline: 全局pipeline实例
+            pipelines: 全局pipeline实例字典
             check_interval: 检查间隔（秒）
             timeout: 任务超时时间（秒）
         """
-        self.global_pipeline = global_pipeline
+        self.pipelines = pipelines
         self.check_interval = check_interval
         self.timeout = timeout
         self.task_manager = get_task_manager()
@@ -268,6 +270,7 @@ class PipelineTaskManager:
                 return
             
             params = task['params']
+            language = params.get('language', 'en')
             
             # 更新状态：准备中
             self.task_manager.update_task_status(task_id, TaskStatus.PREPARING)
@@ -353,9 +356,17 @@ class PipelineTaskManager:
             # 启动监控
             self._start_monitoring(task_id)
             
+            # 根据语言选择pipeline
+            pipeline_to_use = self.pipelines.get(language, self.pipelines.get('en'))
+            if not pipeline_to_use:
+                error_msg = f"未找到适用于语言 '{language}' 的Pipeline，也无默认的 'en' Pipeline"
+                logger.error(f"[任务 {task_id}] {error_msg}")
+                self.task_manager.update_task_status(task_id, TaskStatus.FAILED, error_msg)
+                return
+
             # 直接提交task_id到pipeline，让EncodePipeline从数据库读取数据
-            self.global_pipeline.put(task_id)
-            logger.info(f"[任务 {task_id}] 已提交到Pipeline")
+            pipeline_to_use.put(task_id)
+            logger.info(f"[任务 {task_id}] 已提交到 {language} Pipeline")
             
         except Exception as e:
             error_msg = f"任务执行异常: {str(e)}"

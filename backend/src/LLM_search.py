@@ -8,18 +8,10 @@ import sys
 import logging
 from tenacity import retry, stop_after_attempt, before_log, retry_if_exception_type
 import time
-import json
-import tempfile
-import subprocess
 
 sys.path.append("survey_writer")
 from request import RequestWrapper
-from src.prompts import (
-    QUERY_EXPAND_PROMPT_WITH_ABSTRACT,
-    QUERY_EXPAND_PROMPT_WITHOUT_ABSTRACT,
-    LLM_CHECK_PROMPT,
-    SNIPPET_FILTER_PROMPT,
-)
+from src.prompts import get_prompts
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +57,7 @@ class LLM_search:
         each_query_result: int = 10,
         filter_date: Optional[str] = None,
         max_workers: int = 10,
+        language: str = "en",
     ):
 
         self.model = model
@@ -73,6 +66,7 @@ class LLM_search:
         self.filter_date = filter_date
         self.max_workers = max_workers
         self.request_pool = RequestWrapper(model=model, infer_type=infer_type)
+        self.prompts = get_prompts(language)
 
         self.bing_subscription_key = os.getenv('BING_SEARCH_V7_SUBSCRIPTION_KEY')
         self.bing_endpoint = os.getenv('BING_SEARCH_V7_ENDPOINT', "https://api.bing.microsoft.com/v7.0/search")
@@ -97,11 +91,11 @@ class LLM_search:
     def _initialize_chat(self, topic: str, abstract: str = "") -> list:
         """Initialize chat messages for query generation"""
         if abstract:
-            prompt = QUERY_EXPAND_PROMPT_WITH_ABSTRACT.format(
+            prompt = self.prompts.QUERY_EXPAND_PROMPT_WITH_ABSTRACT.format(
                 topic=topic, abstract=abstract
             )
         else:
-            prompt = QUERY_EXPAND_PROMPT_WITHOUT_ABSTRACT.format(topic=topic)
+            prompt = self.prompts.QUERY_EXPAND_PROMPT_WITHOUT_ABSTRACT.format(topic=topic)
 
         return prompt
 
@@ -142,7 +136,7 @@ class LLM_search:
         Returns:
             str: Refinement prompt
         """
-        return LLM_CHECK_PROMPT.format(queries=queries)
+        return self.prompts.LLM_CHECK_PROMPT.format(queries=queries)
 
     def get_queries(
         self,
@@ -471,7 +465,7 @@ class LLM_search:
         Returns:
             float: Similarity score between 0 and 100
         """
-        prompt = SNIPPET_FILTER_PROMPT.format(
+        prompt = self.prompts.SNIPPET_FILTER_PROMPT.format(
             topic=topic,
             snippet=snippet,
         )

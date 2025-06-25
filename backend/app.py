@@ -14,6 +14,7 @@ from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager
 from dotenv import load_dotenv
+from typing import Dict
 
 # 加载.env文件
 load_dotenv()
@@ -84,12 +85,13 @@ def setup_logging(config):
 class EntirePipeline(Pipeline):
     """完整的Pipeline流水线"""
     
-    def __init__(self, config):
+    def __init__(self, config, language: str = "en"):
         """
         初始化Pipeline
         
         Args:
             config: Pipeline配置对象
+            language: 语言设置
         """
         # 加载模型配置文件
         with open(config.config_file, "r") as f:
@@ -113,7 +115,8 @@ class EntirePipeline(Pipeline):
             top_k=config.top_k,
             self_refine_count=config.self_refine_count,
             self_refine_best_of=config.self_refine_best_of,
-            worker_num=config.parallel_num, 
+            worker_num=config.parallel_num,
+            language=language,
         )
         
         self.decode_pipeline = DecodePipeline(
@@ -199,7 +202,7 @@ class Application:
                     raise
         
         # 初始化组件
-        self.global_pipeline = None
+        self.pipelines: Dict[str, EntirePipeline] = {}
         self.pipeline_monitor = None
         self.pipeline_task_manager = None
         self.task_manager = None
@@ -245,7 +248,7 @@ class Application:
         
         # 初始化Pipeline任务管理器
         self.pipeline_task_manager = PipelineTaskManager(
-            global_pipeline=self.global_pipeline,
+            pipelines=self.pipelines,
             check_interval=self.config.pipeline.check_interval,
             timeout=self.config.pipeline.timeout,
             use_search=self.config.pipeline.use_search,
@@ -263,36 +266,43 @@ class Application:
     
     def _init_global_pipeline(self):
         """初始化全局Pipeline"""
-        self.logger.info("正在初始化全局Pipeline...")
+        self.logger.info("正在初始化全局Pipelines...")
+
+        languages = ["en", "zh"]
+        for lang in languages:
+            self.logger.info(f"正在创建 {lang} pipeline...")
+            pipeline = EntirePipeline(self.config.pipeline, language=lang)
+            
+            # 配置分析器和监控器
+            pipeline_analyser = PipelineAnalyser()
+            pipeline_analyser.register(pipeline)
+            
+            if self.pipeline_monitor is None:
+                self.pipeline_monitor = Monitor(report_interval=60)
+            self.pipeline_monitor.register(pipeline_analyser)
+            
+            pipeline.start()
+            self.pipelines[lang] = pipeline
+            self.logger.info(f"{lang} pipeline 已启动.")
+
+        if self.pipeline_monitor:
+            self.pipeline_monitor.start()
         
-        # 创建Pipeline实例
-        self.global_pipeline = EntirePipeline(self.config.pipeline)
-        
-        # 配置分析器和监控器
-        pipeline_analyser = PipelineAnalyser()
-        pipeline_analyser.register(self.global_pipeline)
-        
-        self.pipeline_monitor = Monitor(report_interval=60)
-        self.pipeline_monitor.register(pipeline_analyser)
-        self.pipeline_monitor.start()
-        
-        # 启动Pipeline
-        self.global_pipeline.start()
-        
-        self.logger.info("全局Pipeline已启动")
+        self.logger.info("所有全局Pipelines已启动")
     
     def get_system_status(self):
         """获取系统状态信息"""
         status = {
-            'pipeline_running': False,
+            'pipelines_running': False,
             'task_manager_connected': False,
             'active_tasks': 0,
             'total_tasks': 0
         }
         
         # Pipeline状态
-        if self.global_pipeline:
-            status['pipeline_running'] = self.global_pipeline.is_start
+        if self.pipelines:
+            status['pipelines_running'] = {lang: p.is_start for lang, p in self.pipelines.items()}
+            status['pipeline_running'] = all(p.is_start for p in self.pipelines.values())
         
         # 任务管理器状态
         if self.task_manager:
@@ -324,13 +334,14 @@ class Application:
     
     def cleanup(self):
         """清理资源"""
-        if self.global_pipeline:
-            self.logger.info("正在关闭全局Pipeline...")
-            try:
-                self.global_pipeline.end()
-                self.logger.info("全局Pipeline已关闭")
-            except Exception as e:
-                self.logger.error(f"关闭Pipeline时出错: {str(e)}")
+        if self.pipelines:
+            self.logger.info("正在关闭全局Pipelines...")
+            for lang, pipeline in self.pipelines.items():
+                try:
+                    pipeline.end()
+                    self.logger.info(f"{lang} pipeline 已关闭")
+                except Exception as e:
+                    self.logger.error(f"关闭 {lang} pipeline 时出错: {str(e)}")
         
         # 清理任务管理器
         if self.task_manager:

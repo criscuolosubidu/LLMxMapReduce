@@ -1,8 +1,4 @@
 import logging
-import random
-import numpy as np
-import math
-import json
 from typing import List
 from src.base_method.module import Module
 from src.base_method.data import Dataset
@@ -12,15 +8,16 @@ from src.hidden.convolution_block.neurons import (
     ModifyOutlineNeuron,
     EvalOutlineNeuron,
 )
+from src.prompts import PromptsProtocol
 
 logger = logging.getLogger(__name__)
 
 class SelfRefineModule(Module):
-    def __init__(self, config, refine_count, best_of):
+    def __init__(self, config, refine_count, best_of, prompts: PromptsProtocol):
         super().__init__()
         self.refine_count = refine_count
         self.best_of = best_of
-        self.single_refine_module = SingleRefineModule(config)
+        self.single_refine_module = SingleRefineModule(config, prompts)
 
     def forward(self, survey: Survey) -> List[float]:
         title = survey.title
@@ -67,13 +64,13 @@ class SelfRefineModule(Module):
 
 
 class SingleRefineModule(Module):
-    def __init__(self, config):
+    def __init__(self, config, prompts: PromptsProtocol):
         super().__init__()
-        self.suggestion_neuron = SelfRefineNeuron(config["refine"])
+        self.suggestion_neuron = SelfRefineNeuron(config["refine"], prompts)
         self.modify_outline_neuron = ModifyOutlineNeuron(
-            config["modify"], "single_suggestion"
+            config["modify"], "single_suggestion", prompts
         )
-        self.eval_outline_neuron = EvalOutlineNeuron(config["eval"])
+        self.eval_outline_neuron = EvalOutlineNeuron(config["eval"], prompts)
 
     def forward(self, title, old_outline, eval_detail, bibkeys) -> List[float]:
         new_suggestion = self.suggestion_neuron(title, old_outline, eval_detail)

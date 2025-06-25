@@ -1,13 +1,12 @@
 import random
-import re
 from typing import Dict
 from request import RequestWrapper
 from src.base_method.module import Neuron, Module
 from src.base_method.data import Dataset
-from src.utils.process_str import str2list, list2str
+from src.utils.process_str import list2str
 from src.data_structure import Skeleton, Survey, Digest
 from src.exceptions import BibkeyNotFoundError, StructureNotCorrespondingError, MdNotFoundError
-from src.prompts import CONCAT_OUTLINE_PROMPT, INIT_OUTLINE_PROMPT
+from src.prompts import get_prompts, PromptsProtocol
 
 from tenacity import retry, stop_after_attempt, after_log, retry_if_exception_type
 import logging
@@ -15,11 +14,12 @@ logger = logging.getLogger(__name__)
 
 
 class SkeletonInitModule(Module):
-    def __init__(self, config, batch_size):
+    def __init__(self, config, batch_size, language: str = "en"):
         super().__init__()
         self.batch_size = batch_size
-        self.outline_neuron = SingleSkeletonNeuron(config["single"])
-        self.concat_neuron = ConcatSkeletonNeuron(config["concat"])
+        prompts = get_prompts(language)
+        self.outline_neuron = SingleSkeletonNeuron(config["single"], prompts)
+        self.concat_neuron = ConcatSkeletonNeuron(config["concat"], prompts)
 
     def forward(self, survey: Survey):
         def split_digests(survey, step):
@@ -39,9 +39,9 @@ class SkeletonInitModule(Module):
 
 
 class SingleSkeletonNeuron(Neuron):
-    def __init__(self, config):
+    def __init__(self, config, prompts: PromptsProtocol):
         super().__init__()
-        self.prompt = INIT_OUTLINE_PROMPT
+        self.prompt = prompts.INIT_OUTLINE_PROMPT
         self.request_pool = RequestWrapper(
             model=config["model"], infer_type=config["infer_type"]
         )
@@ -78,9 +78,9 @@ class SingleSkeletonNeuron(Neuron):
 
 
 class ConcatSkeletonNeuron(Neuron):
-    def __init__(self, config):
+    def __init__(self, config, prompts: PromptsProtocol):
         super().__init__()
-        self.prompt = CONCAT_OUTLINE_PROMPT
+        self.prompt = prompts.CONCAT_OUTLINE_PROMPT
         self.request = RequestWrapper(
             model=config["model"], infer_type=config["infer_type"]
         )

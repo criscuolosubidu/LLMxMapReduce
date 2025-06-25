@@ -5,7 +5,7 @@ from src.base_method.module import Module
 
 from .convolution_module import ConvolutionLayerModule
 from .refine_module import SelfRefineModule
-from src.prompts import DIGEST_BASE_PROMPT
+from src.prompts import get_prompts
 from src.hidden.convolution_block.neurons import (
     FeedbackClusterNeuron,
 )
@@ -23,9 +23,11 @@ class SkeletonRefineModule(Module):
         top_k,
         self_refine_count,
         self_refine_best_of,
+        language: str = "en",
     ):
         super().__init__()
-        self.feedback_cluster_neuron = FeedbackClusterNeuron(configs["cluster"])
+        prompts = get_prompts(language)
+        self.feedback_cluster_neuron = FeedbackClusterNeuron(configs["cluster"], prompts)
 
         self.convolution_layer_module = ConvolutionLayerModule(
             configs["convolution"],
@@ -33,11 +35,13 @@ class SkeletonRefineModule(Module):
             receptive_field,
             result_num,
             top_k,
+            language,
         )
 
         self.self_refine_module = SelfRefineModule(
-            configs["refine"], self_refine_count, self_refine_best_of
+            configs["refine"], self_refine_count, self_refine_best_of, prompts
         )
+        self.prompts = prompts
 
     def forward(self, survey):
         logger.info(
@@ -53,7 +57,7 @@ class SkeletonRefineModule(Module):
                     title,
                     [digest_group],
                     skeleton,
-                    DIGEST_BASE_PROMPT,
+                    self.prompts.DIGEST_BASE_PROMPT,
                 )
                 for digest_group in digests
             ]

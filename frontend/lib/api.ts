@@ -84,7 +84,7 @@ interface TaskOutputResponse {
 }
 
 // 使用相对路径，通过nginx代理访问后端API
-const API_BASE_URL = '';
+const API_BASE_URL = 'http://localhost:5000';
 
 // 发送验证码
 export async function sendVerificationCode(phone: string): Promise<ApiResponse> {
@@ -138,7 +138,12 @@ export async function getUserInfo(token: string): Promise<ApiResponse<UserInfoRe
 }
 
 // 提交任务
-export async function submitTask(token: string, topic: string, description?: string): Promise<ApiResponse<TaskSubmitResponse>> {
+export async function submitTask(
+  token: string, 
+  topic: string, 
+  language: string, 
+  description?: string
+): Promise<ApiResponse<TaskSubmitResponse>> {
   const response = await fetch(`${API_BASE_URL}/api/task/submit`, {
     method: 'POST',
     headers: {
@@ -147,7 +152,8 @@ export async function submitTask(token: string, topic: string, description?: str
     },
     body: JSON.stringify({
       topic,
-      description
+      description,
+      language
     }),
   });
 

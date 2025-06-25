@@ -15,14 +15,17 @@ from src.exceptions import (
 
 import logging
 
+from src.prompts import PromptsProtocol, get_prompts
+
 logger = logging.getLogger(__name__)
-from src.prompts import ORCHESTRA_PROMPT, SUMMARY_PROMPT, POLISH_PROMPT
+
 
 class OrchestraModule(Module):
-    def __init__(self, config):
+    def __init__(self, config, language: str = "en"):
         super().__init__()
-        self.orchestra_neuron = OrchestraNeuron(config['orchestra'])
-        self.polish_neuron = PolishNeuron(config['polish'])
+        prompts = get_prompts(language)
+        self.orchestra_neuron = OrchestraNeuron(config['orchestra'], prompts)
+        self.polish_neuron = PolishNeuron(config['polish'], prompts)
         
     def forward(self, content: ContentNode):
         content = self.orchestra_neuron(content)
@@ -31,12 +34,13 @@ class OrchestraModule(Module):
         return content
 
 class OrchestraNeuron(Neuron):
-    def __init__(self, config):
+    def __init__(self, config, prompts: PromptsProtocol):
         super().__init__()
         self.req_pool = RequestWrapper(
             model=config["model"],
             infer_type=config["infer_type"],
         )
+        self.prompts = prompts
         
     @retry(
         stop=stop_after_attempt(10),
@@ -64,9 +68,9 @@ class OrchestraNeuron(Neuron):
                 digests, outline, content.failure_count
             )
             if content.is_leaf:
-                prompt = ORCHESTRA_PROMPT
+                prompt = self.prompts.ORCHESTRA_PROMPT
             else:
-                prompt = SUMMARY_PROMPT
+                prompt = self.prompts.SUMMARY_PROMPT
             prompt = prompt.format(
                 title=title,
                 outline=outline,
@@ -145,12 +149,13 @@ class OrchestraNeuron(Neuron):
         )
 
 class PolishNeuron(Neuron):
-    def __init__(self, config):
+    def __init__(self, config, prompts: PromptsProtocol):
         super().__init__()
         self.req_pool = RequestWrapper(
             model=config["model"],
             infer_type=config["infer_type"],
         )
+        self.prompts = prompts
         
     @retry(
         stop=stop_after_attempt(10),
@@ -168,7 +173,7 @@ class PolishNeuron(Neuron):
         try:
             title = content.survey_title
             section_title = content.title(with_index=False)
-            prompt = POLISH_PROMPT.format(
+            prompt = self.prompts.POLISH_PROMPT.format(
                 content = content.content
             )
             prompt = process_bibkeys(prompt)

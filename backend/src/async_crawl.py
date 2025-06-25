@@ -9,7 +9,7 @@ import sys
 sys.path.append("survey_writer")
 from request import RequestWrapper
 from typing import List
-from prompts import PAGE_REFINE_PROMPT, SIMILARITY_PROMPT
+from src.prompts import get_prompts
 import logging
 from src.database.mongo_manager import get_mongo_manager
 
@@ -29,15 +29,17 @@ class AsyncCrawler:
     DEFAULT_MIN_LENGTH = 350
     DEFAULT_MAX_LENGTH = 20000
 
-    def __init__(self, model="gemini-2.0-flash-thinking-exp-1219", infer_type="OpenAI"):
+    def __init__(self, model="gemini-2.0-flash-thinking-exp-1219", infer_type="OpenAI", language: str = "en"):
         """
         Initialize the AsyncCrawler.
 
         Args:
             model (str): Model identifier for text processing
             infer_type (str): Inference type, e.g., "OpenAI"
+            language (str): The language for prompts
         """
         self.request_pool = RequestWrapper(model=model, infer_type=infer_type)
+        self.prompts = get_prompts(language)
 
     async def run(
         self,
@@ -102,7 +104,7 @@ class AsyncCrawler:
         """
         try:
             # Calculate similarity score using SIMILARITY_PROMPT
-            prompt = SIMILARITY_PROMPT.format(
+            prompt = self.prompts.SIMILARITY_PROMPT.format(
                 topic=data["topic"], content=data["filtered"]
             )
             res = self.request_pool.completion(prompt)
@@ -125,7 +127,7 @@ class AsyncCrawler:
         """
         try:
             # Generate title and filter content using PAGE_REFINE_PROMPT
-            prompt = PAGE_REFINE_PROMPT.format(
+            prompt = self.prompts.PAGE_REFINE_PROMPT.format(
                 topic=data["topic"], raw_content=data["raw_content"]
             )
             res = self.request_pool.completion(prompt)

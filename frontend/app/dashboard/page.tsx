@@ -32,7 +32,7 @@ interface UserTask {
 export default function DashboardPage() {
   const [topic, setTopic] = useState("")
   const [keywords, setKeywords] = useState("")
-  const [language, setLanguage] = useState("zh")
+  const [language, setLanguage] = useState("en")
   const [isGenerating, setIsGenerating] = useState(false)
   const [tasks, setTasks] = useState<UserTask[]>([])
   const [isLoadingTasks, setIsLoadingTasks] = useState(false)
@@ -112,7 +112,7 @@ export default function DashboardPage() {
     setIsGenerating(true)
     
     try {
-      const response = await submitTask(token, topic, keywords || undefined)
+      const response = await submitTask(token, topic, language, keywords || undefined)
       // 根据后端返回的success字段判断是否成功
       if (response.success) {
         toast.success("提交成功", {

@@ -13,18 +13,19 @@ from src.exceptions import (
     GroupEmptyError,
 )
 from src.utils.process_str import list2str, str2list
-from src.prompts import GROUP_PROMPT
+from src.prompts import get_prompts, PromptsProtocol
 import logging
 
 logger = logging.getLogger(__name__)
 
 
 class GroupModule(Module):
-    def __init__(self, config, mode, digest_batch):
+    def __init__(self, config, mode, digest_batch, language: str = "en"):
         super().__init__()
         self.mode = mode
         self.digest_batch = digest_batch
-        self.neuron = GroupNeuron(config["neuron"])
+        prompts = get_prompts(language)
+        self.neuron = GroupNeuron(config["neuron"], prompts)
 
     def forward(self, survey: Survey):
         papers = list(survey.papers.values())
@@ -134,9 +135,9 @@ class GroupModule(Module):
 
 
 class GroupNeuron(Neuron):
-    def __init__(self, config):
+    def __init__(self, config, prompts: PromptsProtocol):
         super().__init__()
-        self.prompt = GROUP_PROMPT
+        self.prompt = prompts.GROUP_PROMPT
         self.request_pool = RequestWrapper(
             model=config["model"], infer_type=config["infer_type"]
         )

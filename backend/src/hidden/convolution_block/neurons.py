@@ -3,7 +3,7 @@ import re
 import random
 
 from copy import deepcopy
-from typing import List
+from typing import List, Any
 from request import RequestWrapper
 from src.base_method.module import Neuron
 
@@ -14,13 +14,8 @@ from src.exceptions import (
     StructureNotCorrespondingError,
     MdNotFoundError,
 )
-from src.prompts import (
-    MODIFY_OUTLINE_PROMPT,
-    OUTLINE_CONVOLUTION_PROMPT,
-    OUTLINE_ENTROPY_PROMPT,
-    DIGEST_FREE_PROMPT,
-    RESIDUAL_MODIFY_OUTLINE_PROMPT
-)
+from src.prompts import PromptsProtocol
+
 from tenacity import retry, stop_after_attempt, after_log, retry_if_exception_type
 
 
@@ -28,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class FeedbackClusterNeuron(Neuron):
-    def __init__(self, config):
+    def __init__(self, config, prompts: PromptsProtocol):
         super().__init__()
         self.prompt = config.get("prompt", "")
         self.request_pool = RequestWrapper(
@@ -97,9 +92,9 @@ class FeedbackClusterNeuron(Neuron):
 
 
 class ConvolutionKernelNeuron(Neuron):
-    def __init__(self, config):
+    def __init__(self, config, prompts: PromptsProtocol):
         super().__init__()
-        self.prompt = OUTLINE_CONVOLUTION_PROMPT
+        self.prompt = prompts.OUTLINE_CONVOLUTION_PROMPT
         self.request = RequestWrapper(
             model=config["model"], infer_type=config["infer_type"]
         )
@@ -157,10 +152,10 @@ class ConvolutionKernelNeuron(Neuron):
 
 
 class ModifyOutlineNeuron(Neuron):
-    def __init__(self, config, modify_mode):
+    def __init__(self, config, modify_mode, prompts: PromptsProtocol):
         super().__init__()
         self.modify_mode = modify_mode
-        self.prompt = MODIFY_OUTLINE_PROMPT if modify_mode == "single_suggestion" else RESIDUAL_MODIFY_OUTLINE_PROMPT
+        self.prompt = prompts.MODIFY_OUTLINE_PROMPT if modify_mode == "single_suggestion" else prompts.RESIDUAL_MODIFY_OUTLINE_PROMPT
         self.request = RequestWrapper(
             model=config["model"], infer_type=config["infer_type"]
         )
@@ -210,9 +205,9 @@ class ModifyOutlineNeuron(Neuron):
 
 
 class EvalOutlineNeuron(Neuron):
-    def __init__(self, config):
+    def __init__(self, config, prompts: PromptsProtocol):
         super().__init__()
-        self.prompt = OUTLINE_ENTROPY_PROMPT
+        self.prompt = prompts.OUTLINE_ENTROPY_PROMPT
         self.request = RequestWrapper(
             model=config["model"], infer_type=config["infer_type"]
         )
@@ -223,7 +218,7 @@ class EvalOutlineNeuron(Neuron):
         after=after_log(logger, logging.WARNING),
         retry=retry_if_exception_type((IndexError, ValueError)),
     )
-    def forward(self, title, outline) -> tuple[int, str]:
+    def forward(self, title, outline) -> tuple[float, Any]:
         def parse_score(raw_str):
             reg = re.compile(r"<SCORE>\s*(\d+\.\d+|\d+)\s*</SCORE>", re.DOTALL)
             score = reg.findall(raw_str)[0]
@@ -245,9 +240,9 @@ class EvalOutlineNeuron(Neuron):
 
 
 class SelfRefineNeuron(Neuron):
-    def __init__(self, config):
+    def __init__(self, config, prompts: PromptsProtocol):
         super().__init__()
-        self.prompt = DIGEST_FREE_PROMPT
+        self.prompt = prompts.DIGEST_FREE_PROMPT
         self.request = RequestWrapper(
             model=config["model"], infer_type=config["infer_type"]
         )

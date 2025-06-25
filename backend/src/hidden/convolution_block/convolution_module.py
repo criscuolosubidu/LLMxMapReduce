@@ -2,16 +2,16 @@ import logging
 import random
 import numpy as np
 import math
-import json
-from typing import List
+from typing import List, Tuple, Any
 from src.base_method.module import Module
 from src.base_method.data import Dataset
-from src.data_structure import Feedback, Skeleton, Survey
+from src.data_structure import Feedback, Survey, Skeleton
 from src.hidden.convolution_block.neurons import (
     ModifyOutlineNeuron,
     EvalOutlineNeuron,
     ConvolutionKernelNeuron,
 )
+from src.prompts import get_prompts, PromptsProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +24,7 @@ class ConvolutionLayerModule(Module):
         receptive_field,
         result_num,
         top_k,
+        language: str = "en",
     ):
         super().__init__()
         self.convolution_layer = convolution_layer
@@ -31,9 +32,10 @@ class ConvolutionLayerModule(Module):
         self.receptive_field = receptive_field
         self.result_num = result_num
 
-        self.convolution_module = ConvolutionModule(config)
-        self.modify_neuron = ModifyOutlineNeuron(config["modify"], "residual")
-        self.eval_neuron = EvalOutlineNeuron(config["eval"])
+        prompts = get_prompts(language)
+        self.convolution_module = ConvolutionModule(config, prompts)
+        self.modify_neuron = ModifyOutlineNeuron(config["modify"], "residual", prompts)
+        self.eval_neuron = EvalOutlineNeuron(config["eval"], prompts)
 
     def forward(
         self,
@@ -231,11 +233,11 @@ class ConvolutionLayerModule(Module):
 
 class ConvolutionModule(Module):
 
-    def __init__(self, config):
+    def __init__(self, config, prompts: PromptsProtocol):
         super().__init__()
-        self.conv_neuron = ConvolutionKernelNeuron(config["convolution_kernel"])
-        self.modify_neuron = ModifyOutlineNeuron(config["modify"], "single_suggestion")
-        self.eval_neuron = EvalOutlineNeuron(config["eval"])
+        self.conv_neuron = ConvolutionKernelNeuron(config["convolution_kernel"], prompts)
+        self.modify_neuron = ModifyOutlineNeuron(config["modify"], "single_suggestion", prompts)
+        self.eval_neuron = EvalOutlineNeuron(config["eval"], prompts)
 
     def forward(
         self,
@@ -243,7 +245,7 @@ class ConvolutionModule(Module):
         origin_outline: str,
         suggestions: List[Feedback],
         bibkeys: List[str],
-    ) -> List[str]:
+    ) -> Tuple[Any, Any, Any, Any]:
         new_suggestion = self.conv_neuron(title, origin_outline, suggestions, bibkeys)
 
         logger.info(f"Survey {title}, suggestion conv finished")

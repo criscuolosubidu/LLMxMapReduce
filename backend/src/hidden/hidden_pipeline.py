@@ -1,5 +1,3 @@
-import json
-from gevent.fileobject import FileObject
 from async_d import Node
 from async_d import Pipeline
 
@@ -7,7 +5,6 @@ from src.hidden.convolution_block.skeleton_module import SkeletonRefineModule
 from .basic_modules.digest_module import DigestModule
 from .basic_modules.skeleton_init_module import SkeletonInitModule
 from .basic_modules.group_module import GroupModule
-from src.data_structure.survey import Survey
 import logging
 logger = logging.getLogger(__name__)
 
@@ -27,14 +24,19 @@ class HiddenPipeline(Pipeline):
         self_refine_count,
         self_refine_best_of,
         worker_num=1,
+        language: str = "en",
     ):
         self.output_each_block = output_each_block
         self.block_count = block_count
         
-        self.group_module = GroupModule(config["group"], group_mode, convolution_kernel_size)
-        self.skeleton_init_module = SkeletonInitModule(config["skeleton"], skeleton_group_size)
-        self.digest_module = DigestModule(config["digest"])
-        self.regen_digest_module = DigestModule(config["digest"])
+        self.group_module = GroupModule(
+            config["group"], group_mode, convolution_kernel_size, language=language
+        )
+        self.skeleton_init_module = SkeletonInitModule(
+            config["skeleton"], skeleton_group_size, language=language
+        )
+        self.digest_module = DigestModule(config["digest"], language=language)
+        self.regen_digest_module = DigestModule(config["digest"], language=language)
         self.skeleton_refine_module = SkeletonRefineModule(
             config["skeleton_refinement"],
             convolution_layer,
@@ -43,6 +45,7 @@ class HiddenPipeline(Pipeline):
             top_k,
             self_refine_count,
             self_refine_best_of,
+            language=language,
         )
 
         self.group_node = Node(self.group_module, worker_num=worker_num, queue_size=worker_num * 10)

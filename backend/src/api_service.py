@@ -4,7 +4,6 @@ API服务模块
 提供RESTful API接口，支持任务管理和状态查询
 """
 import os
-import json
 import logging
 from typing import Dict, Any, Optional
 from flask import Blueprint, request, jsonify
@@ -13,7 +12,6 @@ from datetime import datetime, timezone, timedelta
 
 from src.task_manager import TaskStatus, get_task_manager
 from src.pipeline_processor import PipelineTaskManager
-from src.database.mongo_manager import get_mongo_manager
 from src.common_service.helpers import jwt_required_custom
 from src.common_service.models import db, User
 
@@ -87,6 +85,9 @@ def submit_task():
                 'success': False,
                 'message': '请求参数不能为空'
             }), 400
+        
+        # 设置默认语言
+        params.setdefault('language', 'en')
         
         # 添加用户ID到参数中（确保类型为整数）
         params['user_id'] = int(current_user_id)
@@ -179,23 +180,26 @@ def get_pipeline_status(task_id: str):
             'message': '任务不存在'
         }), 404
     
-    # 获取全局pipeline状态
-    global_pipeline = pipeline_task_manager.global_pipeline if pipeline_task_manager else None
-    
+    # 获取与任务关联的pipeline
+    language = task['params'].get('language', 'en')
+    pipelines = pipeline_task_manager.pipelines if pipeline_task_manager else {}
+    pipeline = pipelines.get(language)
+
     response = {
         'success': True,
         'task_id': task_id,
         'status': task['status'],
         'pipeline_running': False,
         'nodes': [],
-        'is_global_pipeline': True
+        'is_global_pipeline': True,
+        'language': language,
     }
     
-    if global_pipeline:
-        response['pipeline_running'] = global_pipeline.is_start
+    if pipeline:
+        response['pipeline_running'] = pipeline.is_start
         
         # 获取各节点状态
-        for node_name, node in global_pipeline.all_nodes.items():
+        for node_name, node in pipeline.all_nodes.items():
             node_info = {
                 'name': node_name,
                 'is_running': node.is_start,
@@ -219,21 +223,21 @@ def get_pipeline_status(task_id: str):
 def get_global_pipeline_status():
     """获取全局Pipeline状态"""
     task_manager = get_task_manager()
-    global_pipeline = pipeline_task_manager.global_pipeline if pipeline_task_manager else None
+    pipelines = pipeline_task_manager.pipelines if pipeline_task_manager else {}
     
     response = {
         'success': True,
-        'pipeline_initialized': global_pipeline is not None,
-        'pipeline_running': False,
-        'nodes': [],
+        'pipelines': {},
         'active_tasks_count': task_manager.get_active_task_count(),
         'total_tasks_count': len(task_manager.list_tasks())
     }
     
-    if global_pipeline:
-        response['pipeline_running'] = global_pipeline.is_start
-        
-        for node_name, node in global_pipeline.all_nodes.items():
+    for lang, pipeline in pipelines.items():
+        pipeline_info = {
+            'running': pipeline.is_start,
+            'nodes': []
+        }
+        for node_name, node in pipeline.all_nodes.items():
             node_info = {
                 'name': node_name,
                 'is_running': node.is_start,
@@ -248,7 +252,8 @@ def get_global_pipeline_status():
                     'worker_count': getattr(node, 'worker_num', 0)
                 })
             
-            response['nodes'].append(node_info)
+            pipeline_info['nodes'].append(node_info)
+        response['pipelines'][lang] = pipeline_info
     
     return jsonify(response)
 
