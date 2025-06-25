@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: llm_survey
+      MONGO_INITDB_ROOT_USERNAME: mongouser
+      MONGO_INITDB_ROOT_PASSWORD: password
+
+  postgresql:
+    image: postgres:15
+    container_name: postgresql
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: pguser
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: llm_survey
+    volumes:
+      - postgresql-data:/var/lib/postgresql/data
+
+volumes:
+  mongodb-data:
+  postgresql-data:
