@@ -83,9 +83,10 @@ interface TaskOutputResponse {
   };
 }
 
-// 使用相对路径，通过nginx代理访问后端API
-const API_BASE_URL = 'http://localhost:5000';
-// const API_BASE_URL = '';
+// 使用环境变量控制API基础URL
+// 开发环境：NEXT_PUBLIC_API_BASE_URL=http://localhost:5000
+// 生产环境：NEXT_PUBLIC_API_BASE_URL=（空字符串，使用相对路径）
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 
 // 发送验证码
 export async function sendVerificationCode(phone: string): Promise<ApiResponse> {
